@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { QuotationDocument } from "../components/QuotationDocument";
+import { QuotationOptionsEditor } from "../components/QuotationOptionsEditor";
+import { withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
 import { estimate, type CatalogItem, type ContractFull, type ContractSummary, type RateUnit } from "../lib/estimate";
@@ -153,7 +155,11 @@ function ContractsTab({ onOpen }: { onOpen: (id: number) => void }) {
 function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
   const [data, setData] = useState<ContractFull | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState<"" | "download" | "drive" | "delete">("");
+  const [busy, setBusy] = useState<"" | "download" | "drive" | "delete" | "save">("");
+  const [view, setView] = useState<"edit" | "preview">("edit");
+  const [opts, setOpts] = useState<QuotationOptions | null>(null);
+  const [savedOpts, setSavedOpts] = useState("");
+  const dirty = opts != null && JSON.stringify(opts) !== savedOpts;
   const [driveUrl, setDriveUrl] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -164,6 +170,9 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       .then((c) => {
         setData(c);
         setDriveUrl(c.pdfUrl);
+        const o = withDefaults(c.pdfOptions);
+        setOpts(o);
+        setSavedOpts(JSON.stringify(o));
       })
       .catch((e) => setError((e as Error).message));
   }, [id]);
@@ -174,13 +183,37 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
     const ro = new ResizeObserver(() => setZoom(Math.min(1, el.clientWidth / 794)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [data]);
+  }, [data, view]);
 
   const filename = data ? `${data.quotationNo} - ${data.clientName}.pdf` : "Quotation.pdf";
+
+  /** Saves the edited points / payments / timeline to the Sheet. Returns false if it failed. */
+  const saveOptions = async (quiet = false): Promise<boolean> => {
+    if (!data || !opts) return false;
+    if (!dirty) return true;
+    try {
+      const res = await api<{ options: QuotationOptions }>("saveContractOptions", { id: data.id, options: opts });
+      const o = withDefaults(res.options);
+      setOpts(o);
+      setSavedOpts(JSON.stringify(o));
+      if (!quiet) toast.success("Quotation details saved");
+      return true;
+    } catch (e) {
+      toast.error("Couldn't save the details", (e as Error).message);
+      return false;
+    }
+  };
+
+  const saveClick = async () => {
+    setBusy("save");
+    await saveOptions();
+    setBusy("");
+  };
 
   const download = async () => {
     if (!exportRef.current) return;
     setBusy("download");
+    if (!(await saveOptions(true))) return setBusy("");
     try {
       await shareOrDownload(await renderPdf(exportRef.current), filename);
     } catch (e) {
@@ -193,6 +226,7 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
   const saveToDrive = async () => {
     if (!exportRef.current || !data) return;
     setBusy("drive");
+    if (!(await saveOptions(true))) return setBusy("");
     try {
       const blob = await renderPdf(exportRef.current);
       const res = await api<{ url: string }>("savePdf", { contractId: data.id, filename, base64: await blobToBase64(blob) });
@@ -243,15 +277,55 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
       {error && <p className={styles.error}>{error}</p>}
       {!data && !error && <Skeleton style={{ height: 600 }} />}
-      {data && (
+      {data && opts && (
         <>
-          <div ref={previewRef} className={styles.preview}>
-            <div style={{ zoom } as React.CSSProperties}>
-              <QuotationDocument contract={data} />
+          <div className={styles.viewHead}>
+            <div>
+              <div className={styles.ccNo}>{data.quotationNo}</div>
+              <h2 className={styles.itemsTitle}>{data.clientName}</h2>
+              <div className={styles.ccMeta}>
+                {estimate.formatINR(data.total)} · {estimate.TIERS[data.tier]?.label ?? data.tier} · {data.bhk} BHK
+              </div>
             </div>
+            <nav className={styles.tabs}>
+              <button className={`${styles.tab} ${view === "edit" ? styles.tabOn : ""}`} onClick={() => setView("edit")}>
+                1 · Quotation details
+              </button>
+              <button className={`${styles.tab} ${view === "preview" ? styles.tabOn : ""}`} onClick={() => setView("preview")}>
+                2 · PDF preview
+              </button>
+            </nav>
           </div>
+          {view === "edit" ? (
+            <>
+              <p className={styles.muted}>
+                Edit what goes into this client's PDF. Changes are saved to the Google Sheet with this contract.
+              </p>
+              <QuotationOptionsEditor value={opts} onChange={setOpts} total={data.total} />
+              <div className={styles.editBar}>
+                <span className={styles.muted}>{dirty ? "Unsaved changes" : "All changes saved"}</span>
+                <Button variant="outline" onClick={saveClick} disabled={!dirty || !!busy}>
+                  {busy === "save" ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (await saveOptions(true)) setView("preview");
+                  }}
+                  disabled={!!busy}
+                >
+                  Continue to PDF <ArrowRight size={16} />
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div ref={previewRef} className={styles.preview}>
+              <div style={{ zoom } as React.CSSProperties}>
+                <QuotationDocument contract={data} options={opts} />
+              </div>
+            </div>
+          )}
           <div className={styles.offscreen} aria-hidden>
-            <QuotationDocument contract={data} ref={exportRef} />
+            <QuotationDocument contract={data} options={opts} ref={exportRef} />
           </div>
         </>
       )}

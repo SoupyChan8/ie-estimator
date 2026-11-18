@@ -18,7 +18,7 @@ const COLS = {
     'qtyBhk1', 'qtyBhk2', 'qtyBhk3', 'qtyBhk4', 'scalesWithArea', 'active', 'sortOrder'],
   Contracts: ['id', 'quotationNo', 'createdAt', 'clientName', 'clientPhone', 'clientEmail', 'siteAddress',
     'projectScope', 'bhk', 'carpetArea', 'tier', 'total', 'designerName', 'createdBy', 'lineItemsJson',
-    'clientSigFileId', 'designerSigFileId', 'pdfFileId', 'pdfUrl'],
+    'clientSigFileId', 'designerSigFileId', 'pdfFileId', 'pdfUrl', 'pdfOptionsJson'],
   Users: ['email', 'name', 'passwordHash', 'salt', 'active'],
 };
 const SESSION_DAYS = 30;
@@ -64,6 +64,7 @@ function doPost(e) {
       case 'saveItem': return json(withLock(() => saveItem(p)));
       case 'deleteItem': return json(withLock(() => deleteItem(Number(p.id))));
       case 'savePdf': return json(withLock(() => savePdf(p)));
+      case 'saveContractOptions': return json(withLock(() => saveContractOptions(p)));
       case 'changePassword': return json(changePassword(session, p.currentPassword, p.newPassword));
     }
     return json({ error: 'Unknown action: ' + action });
@@ -205,6 +206,13 @@ function headersOf(name) {
 
 function rowFor(name, obj) {
   return headersOf(name).map(c => (obj[c] === undefined || obj[c] === null ? '' : obj[c]));
+}
+
+/** Adds a missing column header (for sheets created before the column existed). */
+function ensureColumn(name, key) {
+  const sh = sheetOf(name);
+  if (headersOf(name).indexOf(key) < 0) sh.getRange(1, sh.getLastColumn() + 1).setValue(key).setFontWeight('bold');
+  return colOf(name, key);
 }
 
 function colOf(name, key) {
@@ -440,7 +448,30 @@ function getContract(id) {
   out.clientSignature = pngDataUrl(c.clientSigFileId);
   out.designerSignature = pngDataUrl(c.designerSigFileId);
   out.signedAt = out.createdAt;
+  out.pdfOptions = null;
+  if (c.pdfOptionsJson) { try { out.pdfOptions = JSON.parse(c.pdfOptionsJson); } catch (e) { /* ignore bad JSON */ } }
   return out;
+}
+
+/** Studio edits for the PDF: what's included / not included, payment schedule and project timeline. */
+function saveContractOptions(p) {
+  const id = Number(p.id);
+  const row = findRowIndex(TABS.contracts, id);
+  if (row < 0) throw new Error('Contract not found.');
+  const o = p.options || {};
+  const text = (v, n) => String(v === undefined || v === null ? '' : v).trim().slice(0, n);
+  const list = (arr) => (Array.isArray(arr) ? arr : []).map(x => text(x, 300)).filter(Boolean).slice(0, 20);
+  const clean = {
+    included: list(o.included),
+    notIncluded: list(o.notIncluded),
+    payments: (Array.isArray(o.payments) ? o.payments : []).slice(0, 10).map(x => ({
+      pct: Math.max(0, Math.min(100, num(x.pct))), title: text(x.title, 80), sub: text(x.sub, 160),
+    })).filter(x => x.title || x.pct),
+    timeline: (Array.isArray(o.timeline) ? o.timeline : []).slice(0, 8).map(x => ({ title: text(x.title, 60), sub: text(x.sub, 40) }))
+      .filter(x => x.title),
+  };
+  sheetOf(TABS.contracts).getRange(row, ensureColumn(TABS.contracts, 'pdfOptionsJson')).setValue(JSON.stringify(clean));
+  return { options: clean };
 }
 
 function deleteContract(id) {

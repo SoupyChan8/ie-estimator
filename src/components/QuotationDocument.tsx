@@ -1,44 +1,10 @@
 import { forwardRef } from "react";
 import { estimate, type ContractFull, type LineItem } from "../lib/estimate";
 import { brandAssets } from "../lib/brandAssets";
+import { withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import styles from "./QuotationDocument.module.css";
 
-type Props = { contract: ContractFull; className?: string };
-
-const INCLUDED = [
-  "BWP, Anti Termite Ply, Outer & Inner Sunmica Finish",
-  "Design consultation & space planning",
-  "3D visualisation and drawings",
-  "Carpentry and modular furniture",
-  "Electrical work and lighting for furnitures",
-  "Installation and final finishing",
-  "Cleaning the rubbish materials and placing the sacs outside",
-];
-
-const NOT_INCLUDED = [
-  "Appliances (AC, fridge, chimney, geyser, etc.)",
-  "Loose furniture (sofa, dining table, chairs, etc.), except mentioned in the scope above",
-  "Curtains, mattress, blinds and rugs",
-  "Decorative accessories, wall paint, lights and artefacts",
-  "Government / building charges",
-  "Items not mentioned in the scope above",
-];
-
-const PAYMENTS = [
-  { pct: 10, title: "Booking / Confirmation", sub: "On agreement signing" },
-  { pct: 20, title: "Design Approval", sub: "After final 3D design & material selection" },
-  { pct: 30, title: "Material Procurement", sub: "On start of production / procurement" },
-  { pct: 30, title: "Installation", sub: "On-site execution and installation" },
-  { pct: 10, title: "Handover", sub: "After final completion and handover" },
-];
-
-const TIMELINE = [
-  { title: "Design", sub: "2–3 weeks" },
-  { title: "Material Finalisation", sub: "1–2 weeks" },
-  { title: "Production", sub: "3–4 weeks" },
-  { title: "Installation", sub: "3–4 weeks" },
-  { title: "Handover", sub: "" },
-];
+type Props = { contract: ContractFull; options?: QuotationOptions; className?: string };
 
 const TERMS = [
   "This quotation is valid for 15 days from the date of issue.",
@@ -96,7 +62,9 @@ function Img({ src, className }: { src?: string; className?: string }) {
   );
 }
 
-export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function QuotationDocument({ contract, className }, ref) {
+export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function QuotationDocument({ contract, options, className }, ref) {
+  const { included: INCLUDED, notIncluded: NOT_INCLUDED, payments: PAYMENTS, timeline: TIMELINE } = options ?? withDefaults(contract.pdfOptions);
+  const dense = INCLUDED.length + NOT_INCLUDED.length > 13;
   const groups = estimate.groupByCategory(contract.lineItems);
 
   const rows: Row[] = [];
@@ -298,9 +266,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
       {/* Included */}
       <section className={styles.page} data-pdf-page>
         <PageHead num="04" title="What's Included" />
-        <ul className={styles.checks}>
-          {INCLUDED.map((t) => (
-            <li key={t}>
+        <ul className={`${styles.checks} ${dense ? styles.checksDense : ""}`}>
+          {INCLUDED.map((t, i) => (
+            <li key={i}>
               <span className={styles.badge}>✓</span>
               {t}
             </li>
@@ -308,9 +276,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
         </ul>
         <div className={styles.ruleWide} />
         <div className={styles.h2}>What's Not Included</div>
-        <ul className={styles.checks}>
-          {NOT_INCLUDED.map((t) => (
-            <li key={t}>
+        <ul className={`${styles.checks} ${dense ? styles.checksDense : ""}`}>
+          {NOT_INCLUDED.map((t, i) => (
+            <li key={i}>
               <span className={`${styles.badge} ${styles.badgeX}`}>×</span>
               {t}
             </li>
@@ -322,9 +290,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
       {/* Payment */}
       <section className={styles.page} data-pdf-page>
         <PageHead num="05" title="Payment Schedule" />
-        <div className={styles.payments}>
-          {PAYMENTS.map((p) => (
-            <div key={p.title} className={styles.payRow}>
+        <div className={`${styles.payments} ${PAYMENTS.length > 5 ? styles.paymentsDense : ""}`}>
+          {PAYMENTS.map((p, pi) => (
+            <div key={pi} className={styles.payRow}>
               <span className={styles.payDot} />
               <span className={styles.payPct}>{p.pct}%</span>
               <span>
@@ -339,9 +307,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
         </div>
         <div className={styles.ruleWide} />
         <div className={styles.h2}>Project Timeline (Estimated)</div>
-        <div className={styles.timeline}>
+        <div className={styles.timeline} style={{ gridTemplateColumns: `repeat(${Math.max(1, TIMELINE.length)}, 1fr)` }}>
           {TIMELINE.map((t, i) => (
-            <div key={t.title} className={styles.tStep}>
+            <div key={i} className={styles.tStep}>
               <div className={styles.tDotRow}>
                 <span className={styles.tDot}>{i + 1}</span>
                 {i < TIMELINE.length - 1 && <span className={styles.tLine} />}

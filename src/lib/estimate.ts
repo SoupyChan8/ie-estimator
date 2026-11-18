@@ -52,6 +52,8 @@ export type ContractSummary = {
 };
 
 export type ContractFull = ContractSummary & {
+  /** Studio edits for the PDF; null means the defaults. */
+  pdfOptions?: import("./quotationOptions").QuotationOptions | null;
   clientPhone: string;
   clientEmail: string;
   designerName: string;

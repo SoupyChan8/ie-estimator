@@ -1,0 +1,31 @@
+.wrap { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-6); }
+.block { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--spacing-6); display: flex; flex-direction: column; gap: var(--spacing-3); align-items: flex-start; animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.block:nth-child(n + 3) { grid-column: 1 / -1; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+.head { display: flex; align-items: center; gap: var(--spacing-3); width: 100%; }
+.head h3 { margin: 0; flex: 1; font-family: var(--font-family-display); font-weight: 400; font-size: 1.45rem; }
+.count { font-size: 0.8rem; color: var(--muted-foreground); }
+.badge { font-size: 0.78rem; padding: 3px 10px; border-radius: var(--radius-full); }
+.ok { background: #dfe6dc; color: var(--success); }
+.warn { background: #f1d9d2; color: var(--oxide); }
+.rows { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.pointRow { display: grid; grid-template-columns: 26px 1fr 40px; gap: 8px; align-items: center; }
+.order { display: flex; flex-direction: column; align-items: center; color: var(--muted-foreground); line-height: 1; }
+.order button { border: none; background: none; color: var(--muted-foreground); font-size: 9px; padding: 2px 6px; cursor: pointer; }
+.order button:disabled { opacity: 0.25; cursor: default; }
+.payRow { display: grid; grid-template-columns: 96px 1fr 1.3fr 110px 40px; gap: 8px; align-items: center; }
+.pct { display: flex; align-items: center; gap: 4px; font-weight: 600; }
+.pct input { text-align: right; }
+.amt { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: var(--muted-foreground); }
+.timeRow { display: grid; grid-template-columns: 30px 1fr 1fr 40px; gap: 8px; align-items: center; }
+.num { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--font-family-display); font-size: 0.9rem; }
+.del { width: 40px; height: 40px; border: none; border-radius: var(--radius); background: transparent; color: var(--muted-foreground); cursor: pointer; display: grid; place-items: center; }
+.del:hover { background: #f1d9d2; color: var(--oxide); }
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .payRow { grid-template-columns: 80px 1fr 40px; }
+  .payRow input:nth-of-type(3) { grid-column: 2 / 3; }
+  .amt { grid-column: 1 / 2; grid-row: 2; text-align: left; }
+}

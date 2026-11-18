@@ -667,7 +667,7 @@ function DetailsStep({ details, setDetails }: { details: ClientDetails; setDetai
       <div className={styles.form}>
         <label className={styles.formField}>
           <span>Client name *</span>
-          <Input {...field("clientName")} placeholder="Mr. Sandip Rath" autoComplete="off" />
+          <Input {...field("clientName")} placeholder="Name" autoComplete="off" />
         </label>
         <label className={styles.formField}>
           <span>Phone</span>
