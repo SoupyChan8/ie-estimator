@@ -147,7 +147,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
         <img src={brandAssets.cover} alt="" className={styles.coverImg} />
         <div className={styles.coverShade} />
         <div className={styles.coverInner}>
-          <img src={brandAssets.logoLight} alt="Interior Editors" className={styles.coverLogo} />
+          <img src={brandAssets.logoCover} alt="Interior Editors" className={styles.coverLogo} />
           <div className={styles.coverText}>
             <div className={styles.coverKicker}>DESIGN &nbsp;·&nbsp; TRANSFORM &nbsp;·&nbsp; INSPIRE</div>
             <div className={styles.coverTitle}>
@@ -202,7 +202,11 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
               something usable!!
             </div>
           </div>
-          <Img src={brandAssets.overview} className={styles.overviewImg} />
+          <div className={styles.overviewImgs}>
+            {brandAssets.overview.map((src) => (
+              <Img key={src} src={src} className={styles.overviewImg} />
+            ))}
+          </div>
         </div>
         <Foot />
       </section>

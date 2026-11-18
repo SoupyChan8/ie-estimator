@@ -5,10 +5,12 @@ export const brandAssets = {
   welcomePortrait: `${A}welcome-portrait.jpg`,
   welcomeLandscape: `${A}welcome-landscape.jpg`,
   cover: `${A}cover.jpg`,
-  overview: `${A}overview.jpg`,
+  overview: [`${A}overview-1.jpg`, `${A}overview-2.jpg`],
   /** Horizontal lockup (arch + wordmark), true proportions. */
-  logoDark: `${A}logo-h-teak.png`,
-  logoLight: `${A}logo-h-plaster.png`,
+  logoDark: `${A}logo-h-teak-bold.png`,
+  logoLight: `${A}logo-h-plaster-bold.png`,
+  /** Light logo with a soft shadow baked in, for placing over photos. */
+  logoCover: `${A}logo-cover.png`,
   /** Stacked logo (arch above wordmark), as in the original artwork. */
   logoStackDark: `${A}logo-v-teak.png`,
   logoStackLight: `${A}logo-v-plaster.png`,
