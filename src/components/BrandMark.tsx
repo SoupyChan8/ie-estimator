@@ -1,15 +1,18 @@
 import { brandAssets } from "../lib/brandAssets";
 import styles from "./BrandMark.module.css";
 
-type Props = { tone?: "dark" | "light"; size?: "sm" | "md" | "lg"; className?: string };
+type Props = { tone?: "dark" | "light"; size?: "sm" | "md" | "lg"; stacked?: boolean; className?: string };
 
-/** The Interior Editors archway + wordmark logo from the website. */
-export function BrandMark({ tone = "dark", size = "md", className }: Props) {
+/** The Interior Editors archway logo, drawn at its true proportions (never stretched). */
+export function BrandMark({ tone = "dark", size = "md", stacked = false, className }: Props) {
+  const src = stacked
+    ? tone === "light" ? brandAssets.logoStackLight : brandAssets.logoStackDark
+    : tone === "light" ? brandAssets.logoLight : brandAssets.logoDark;
   return (
     <img
-      src={tone === "light" ? brandAssets.logoLight : brandAssets.logoDark}
+      src={src}
       alt="Interior Editors"
-      className={`${styles.logo} ${styles[size]} ${className ?? ""}`}
+      className={`${styles.logo} ${stacked ? styles.stacked : ""} ${styles[size]} ${className ?? ""}`}
       draggable={false}
     />
   );

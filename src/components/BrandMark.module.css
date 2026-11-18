@@ -1,4 +1,8 @@
-.logo { display: block; width: auto; user-select: none; -webkit-user-drag: none; }
-.sm { height: 40px; }
-.md { height: 54px; }
-.lg { height: 64px; }
+.logo { display: block; height: auto; max-width: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+/* Horizontal lockup is 4.17 : 1 — set the width, let the height follow. */
+.sm { width: 168px; }
+.md { width: 210px; }
+.lg { width: 280px; }
+.stacked.sm { width: 96px; }
+.stacked.md { width: 128px; }
+.stacked.lg { width: 168px; }

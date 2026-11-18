@@ -5,8 +5,8 @@
 .coverImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .coverGlow { position: absolute; inset: 0; background: radial-gradient(ellipse 35% 45% at 85% 12%, rgba(214, 170, 96, 0.45), transparent 70%), radial-gradient(ellipse 50% 25% at 50% 92%, rgba(205, 185, 150, 0.22), transparent 70%), repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 12px, transparent 12px 24px), linear-gradient(170deg, #3a2c21 0%, #1f1813 55%, #17110d 100%); }
 .coverShade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 17, 13, 0.7) 0%, rgba(23, 17, 13, 0.15) 22%, rgba(23, 17, 13, 0.1) 42%, rgba(23, 17, 13, 0.82) 66%, rgba(23, 17, 13, 0.94) 100%); }
-.coverLogo { height: 92px; width: auto; display: block; }
-.miniLogo { height: 42px; width: auto; display: block; margin-top: 4px; }
+.coverLogo { width: 330px; height: auto; display: block; }
+.miniLogo { width: 170px; height: auto; display: block; margin-top: 4px; }
 .coverInner { position: relative; height: 100%; padding: 64px 68px; box-sizing: border-box; }
 .coverBrand { display: flex; align-items: center; gap: 14px; }
 .coverBrand > span:last-child { display: flex; flex-direction: column; }
@@ -99,6 +99,6 @@
 .signImg { height: 58px; width: auto; max-width: 100%; align-self: flex-start; }
 .signLine { border-top: 1.5px solid #5a4a3d; }
 .contact { display: flex; flex-direction: column; gap: 10px; font-size: 17px; color: #5a4a3d; }
-.logo { position: absolute; right: 56px; bottom: 36px; width: 120px; height: auto; }
+.logo { position: absolute; right: 56px; bottom: 36px; width: 104px; height: auto; }
 .logoBox { position: absolute; right: 56px; bottom: 40px; width: 128px; height: 104px; background: #17110d; color: #b08947; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-family-display); letter-spacing: 2px; font-size: 15px; }
 .logoBox small { font-size: 8px; letter-spacing: 3px; }

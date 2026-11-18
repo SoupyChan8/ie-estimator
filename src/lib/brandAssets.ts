@@ -6,9 +6,13 @@ export const brandAssets = {
   welcomeLandscape: `${A}welcome-landscape.jpg`,
   cover: `${A}cover.jpg`,
   overview: `${A}overview.jpg`,
-  logoDark: `${A}logo-teak.png`,
-  logoLight: `${A}logo-plaster.png`,
-  logoGold: `${A}logo-gold.png`,
+  /** Horizontal lockup (arch + wordmark), true proportions. */
+  logoDark: `${A}logo-h-teak.png`,
+  logoLight: `${A}logo-h-plaster.png`,
+  /** Stacked logo (arch above wordmark), as in the original artwork. */
+  logoStackDark: `${A}logo-v-teak.png`,
+  logoStackLight: `${A}logo-v-plaster.png`,
+  logoStackBrass: `${A}logo-v-brass.png`,
   /** Thumbnail per scope category on the PDF, keyed by category name. */
   scope: {
     "Living Room": `${A}scope-living.jpg`,

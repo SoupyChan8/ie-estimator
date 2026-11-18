@@ -401,7 +401,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
           <div>✉ &nbsp; {brandAssets.contact.email}</div>
           <div>⌂ &nbsp; {brandAssets.contact.city}</div>
         </div>
-        <img src={brandAssets.logoGold} alt="Interior Editors" className={styles.logo} />
+        <img src={brandAssets.logoStackBrass} alt="Interior Editors" className={styles.logo} />
         <Foot />
       </section>
     </div>

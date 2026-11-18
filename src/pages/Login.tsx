@@ -33,7 +33,7 @@ export default function Login() {
       </picture>
       <div className={styles.glow} aria-hidden />
       <form className={styles.card} onSubmit={submit}>
-        <BrandMark size="md" />
+        <BrandMark stacked size="md" className="loginLogo" />
         <h1 className={styles.title}>Sign in</h1>
         <p className={styles.sub}>Studio access only. Sign in once on this iPad and you'll stay signed in.</p>
         <label className={styles.field}>
