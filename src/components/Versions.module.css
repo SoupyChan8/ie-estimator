@@ -41,3 +41,6 @@
 .rbLabel { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
 .rbName { font-family: var(--font-family-display); font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
 .editedTag { font-family: var(--font-family-base); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-full); background: #f1d9d2; color: var(--oxide); }
+.usingTag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--success); padding: 6px 12px; border-radius: var(--radius-full); background: #dfe6dc; }
+.rbName { flex-wrap: wrap; max-width: 300px; row-gap: 4px; }
+.rbBar .select { min-width: 200px; flex: 0 1 260px; }

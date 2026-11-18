@@ -529,21 +529,51 @@ function canon(x) {
 }
 
 function rateBookMatches(data) {
-  if (!data) return false;
-  const live = getCatalog();
-  const norm = (c) => canon({ categories: c.categories || [], items: c.items || [] });
-  return norm(live) === norm(data);
+  return !!data && canonRateBook(getCatalog()) === canonRateBook(data);
 }
 
 function listVersions(kind) {
   versionsSheet();
   const rows = readTable(TABS.versions).filter(v => !kind || v.kind === kind);
+  const live = kind === 'ratebook' || !kind ? liveRateBookMatch() : null;
   return rows.map(v => {
     const out = versionRow(v);
-    // For the rate book version that is currently loaded, report whether it has been edited since.
-    if (out.isActive) out.edited = !rateBookMatches(versionData(v));
+    if (v.kind === 'ratebook') {
+      // isActive: the live rate book is exactly this version. isBase: the live rate book is a custom
+      // (unsaved) edit that started from this version.
+      out.isActive = live.matchId === Number(v.id);
+      out.isBase = !live.matchId && live.baseId === Number(v.id);
+      out.edited = out.isBase;
+    }
     return out;
   }).sort((a, b) => b.id - a.id);
+}
+
+/**
+ * Which saved rate book version the live rate book is identical to (matchId, or null for a custom,
+ * unsaved rate book), and which version it was last loaded from (baseId). Keeps ACTIVE_RATEBOOK_VERSION
+ * pointing at the match, so edits that land on another version are recognised as that version.
+ */
+function liveRateBookMatch() {
+  const props = PropertiesService.getScriptProperties();
+  const activeId = Number(props.getProperty('ACTIVE_RATEBOOK_VERSION') || 0) || null;
+  const live = canonRateBook(getCatalog());
+  const books = readTable(TABS.versions).filter(v => v.kind === 'ratebook')
+    .sort((a, b) => {
+      // prefer the active one, then named versions over backups, then newest
+      const rank = (v) => (Number(v.id) === activeId ? 0 : /^(Backup before|Custom rates before)/.test(String(v.name)) ? 2 : 1);
+      return rank(a) - rank(b) || Number(b.id) - Number(a.id);
+    });
+  let matchId = null;
+  for (let i = 0; i < books.length && !matchId; i++) {
+    try { if (canonRateBook(versionData(books[i])) === live) matchId = Number(books[i].id); } catch (e) { /* unreadable */ }
+  }
+  if (matchId && matchId !== activeId) props.setProperty('ACTIVE_RATEBOOK_VERSION', String(matchId));
+  return { matchId: matchId, baseId: matchId || activeId };
+}
+
+function canonRateBook(c) {
+  return c ? canon({ categories: c.categories || [], items: c.items || [] }) : '';
 }
 
 function getVersion(id) {
@@ -630,13 +660,10 @@ function deleteVersion(id) {
 function restoreRateBook(id, session) {
   const target = getVersion(id);
   if (target.kind !== 'ratebook' || !target.data) throw new Error('That is not a rate book version.');
-  // Back up the live rate book first, unless it is an unedited copy of a saved version.
+  // Back up the live rate book first, unless it is identical to a saved version.
   const props = PropertiesService.getScriptProperties();
-  const activeId = props.getProperty('ACTIVE_RATEBOOK_VERSION');
-  let activeData = null;
-  if (activeId) { try { activeData = getVersion(Number(activeId)).data; } catch (e) { /* deleted */ } }
-  const backup = rateBookMatches(activeData) ? null
-    : saveVersion({ kind: 'ratebook', backup: true, name: 'Backup before loading "' + target.name + '"' }, session);
+  const backup = liveRateBookMatch().matchId ? null
+    : saveVersion({ kind: 'ratebook', backup: true, name: 'Custom rates before switching to "' + target.name + '"' }, session);
   const data = target.data;
   [[TABS.categories, data.categories], [TABS.items, data.items]].forEach(([name, rows]) => {
     const sh = sheetOf(name);
@@ -701,6 +728,234 @@ function savePdf(p) {
   return { url: file.getUrl() };
 }
 
+/* ───────────────────────── Sample versions (for testing) ───────────────────────── */
+
+/**
+ * Rate figures are indicative 2026 Kolkata / metro market rates (DesignCafe, Livspace and Studio Matrx cost
+ * guides): wardrobes ₹800–1,200/sq ft basic, ₹1,400–2,000 mid, ₹2,000–3,200 premium, ₹3,200+ luxury;
+ * gypsum ceiling ₹120–180/sq ft, layered cove ceilings ₹200–300; premium emulsion ₹45–65/sq ft, designer
+ * paint ₹80–150, artisan plaster ₹200+. Each tier column steps up within the version's market.
+ */
+const SAMPLE_RATEBOOKS = [
+  {
+    name: 'Value Homes 2026',
+    note: 'First homes and rental flats — laminate finishes, essentials only',
+    factor: 0.8,
+    rates: {
+      'TV Unit': [800, 1050, 1400], 'Louver Wall Panelling': [600, 800, 1100], 'Partition with Showpiece Sections': [800, 1050, 1400],
+      'Sofa': [26000, 38000, 60000], 'Dining Table Set': [26000, 40000, 65000],
+      'Modular Kitchen': [6000, 8000, 11000], 'Countertop': [950, 1600, 2600], 'Kitchen Dado': [140, 220, 380],
+      'Wardrobe': [850, 1150, 1500], 'Wardrobe Loft': [700, 950, 1250],
+      'Bed with Hydraulic Storage': [30000, 45000, 70000], 'Bed with Storage': [25000, 38000, 58000],
+      'Headboard Wall Panelling': [500, 700, 1000],
+      'Gypsum False Ceiling': [95, 120, 160], 'Cove / Profile Lighting': [150, 240, 380],
+      'Electrical Labour & Wiring': [38, 50, 70], 'Light Fixtures': [30, 60, 110],
+      'Interior Painting': [18, 26, 40], 'Texture / Wallpaper Feature Wall': [95, 160, 280],
+    },
+    // essentials only: no partition, louvers or bar for smaller homes
+    qty: { 'Louver Wall Panelling': [0, 0, 30, 38], 'Partition with Showpiece Sections': [0, 0, 0, 32], 'Bar / Coffee Counter': [0, 0, 0, 12] },
+  },
+  {
+    name: 'Premium Apartments 2026',
+    note: 'Gated-community 2–3 BHKs — acrylic / PU finishes, Hettich hardware',
+    factor: 1.25,
+    rates: {
+      'TV Unit': [1250, 1700, 2350], 'Modular Kitchen': [9500, 13000, 18500], 'Countertop': [2000, 3200, 4800],
+      'Wardrobe': [1450, 1950, 2700], 'Wardrobe Loft': [1150, 1550, 2150],
+      'Sofa': [55000, 85000, 140000], 'Dining Table Set': [60000, 95000, 160000],
+      'Bed with Hydraulic Storage': [60000, 90000, 145000], 'Bed with Storage': [48000, 75000, 120000],
+      'Gypsum False Ceiling': [140, 190, 260], 'Cove / Profile Lighting': [280, 420, 650],
+      'Electrical Labour & Wiring': [55, 75, 105], 'Light Fixtures': [70, 120, 210],
+      'Interior Painting': [32, 50, 80], 'Texture / Wallpaper Feature Wall': [180, 300, 500],
+    },
+    qty: {},
+  },
+  {
+    name: 'High-End Residences 2026',
+    note: 'Villas and penthouses — veneer, PU and stone, Blum / Häfele, design fee charged',
+    factor: 1.8,
+    rates: {
+      'TV Unit': [2000, 2800, 3900], 'Louver Wall Panelling': [1500, 2100, 3000], 'Puja Unit': [2400, 3300, 4600],
+      'Sofa': [120000, 190000, 320000], 'Ottomans (2 × 2)': [22000, 35000, 60000], 'Dining Table Set': [130000, 210000, 360000],
+      'Modular Kitchen': [16000, 22000, 32000], 'Tall Unit': [2600, 3500, 4800], 'Countertop': [3500, 5500, 8500], 'Kitchen Dado': [450, 750, 1300],
+      'Wardrobe': [2200, 3000, 4200], 'Wardrobe Loft': [1700, 2300, 3200],
+      'Bed with Hydraulic Storage': [110000, 170000, 280000], 'Bed with Storage': [85000, 130000, 210000],
+      'Headboard Wall Panelling': [1400, 2000, 2900], 'Vanity Unit': [38000, 60000, 95000], 'Mirror Cabinet with Light': [16000, 26000, 42000],
+      'Gypsum False Ceiling': [220, 300, 420], 'Cove / Profile Lighting': [480, 700, 1000],
+      'Electrical Labour & Wiring': [85, 110, 150], 'Light Fixtures': [180, 300, 500],
+      'Interior Painting': [65, 110, 180], 'Texture / Wallpaper Feature Wall': [400, 650, 1100],
+    },
+    qty: { 'Bar / Coffee Counter': [0, 12, 15, 18] },
+    // [category, name, description, unit, std, prem, lux, 1BHK, 2BHK, 3BHK, 4BHK, scalesWithArea, under?]
+    add: [
+      [4, 'Walk-in Wardrobe', 'Open walk-in with island drawers and glass shutters', 'sqft', 2800, 3800, 5200, 0, 0, 60, 80, false],
+      [10, 'Engineered Wood Flooring', 'Engineered oak in bedrooms and living, with skirting', 'sqft', 450, 650, 950, 250, 420, 620, 900, true],
+      [11, 'Smart Home Automation', 'App and voice control for lights, curtains and AC', 'nos', 150000, 250000, 400000, 1, 1, 1, 1, false],
+      [11, 'Motorised Curtain Tracks', 'Silent motorised tracks, per window', 'nos', 18000, 26000, 38000, 2, 3, 4, 5, false, 'Smart Home Automation'],
+      [11, 'Design Fee', 'Concept, 3D visualisation and full working drawings', 'sqft', 80, 110, 150, 450, 750, 1100, 1600, true],
+    ],
+  },
+];
+
+const SAMPLE_TERMS = [
+  {
+    name: 'Standard Residential',
+    included: [
+      'BWP anti-termite ply with Sunmica laminate finish, inside and out',
+      'Design consultation, space planning and up to 2 rounds of 3D revisions',
+      'Carpentry and modular furniture as per the approved drawings',
+      'Electrical work and lighting for furniture',
+      'Installation, final finishing and site cleaning',
+      '1 year service warranty on workmanship',
+    ],
+    notIncluded: [
+      'Appliances (AC, fridge, chimney, geyser, etc.)',
+      'Loose furniture and décor not listed in the scope',
+      'Curtains, mattresses, blinds and rugs',
+      'Civil, plumbing and flooring changes',
+      'Society / building permissions and charges',
+      'Items not mentioned in the scope above',
+    ],
+    payments: [
+      { pct: 10, title: 'Booking', sub: 'On signing the agreement' },
+      { pct: 40, title: 'Design Sign-off', sub: 'Final 3D and materials approved, production starts' },
+      { pct: 40, title: 'Material at Site', sub: 'Carcass and shutters delivered for installation' },
+      { pct: 10, title: 'Handover', sub: 'After snag list is closed' },
+    ],
+    timeline: [
+      { title: 'Design', sub: '2–3 weeks' },
+      { title: 'Production', sub: '3–4 weeks' },
+      { title: 'Installation', sub: '2–3 weeks' },
+      { title: 'Handover', sub: 'Week 9–10' },
+    ],
+  },
+  {
+    name: 'High-End Turnkey',
+    included: [
+      'Marine-grade ply with PU, veneer and fluted finishes',
+      'Blum / Häfele soft-close hardware and premium handles',
+      'Concept design, photo-real 3D, mood boards and material samples',
+      'Dedicated project manager with weekly site updates',
+      'Lighting design, electrical work and fixture installation',
+      'Styling, deep cleaning and handover walk-through',
+      '10 year warranty on carcass, 2 years on hardware and workmanship',
+    ],
+    notIncluded: [
+      'Appliances, sanitaryware and CP fittings',
+      'Italian marble and stone supply (installation included)',
+      'Art, décor accessories and soft furnishings',
+      'Structural, façade and landscape work',
+      'Society / building permissions and charges',
+      'GST as applicable',
+    ],
+    payments: [
+      { pct: 10, title: 'Booking', sub: 'On signing the agreement' },
+      { pct: 15, title: 'Design Approval', sub: 'Concept, 3D and material selection signed off' },
+      { pct: 30, title: 'Production', sub: 'Orders placed for veneer, stone and hardware' },
+      { pct: 25, title: 'Installation', sub: 'Carcass and panelling installed on site' },
+      { pct: 15, title: 'Finishing', sub: 'Polish, lighting and styling complete' },
+      { pct: 5, title: 'Handover', sub: '30 days after handover, once snags are closed' },
+    ],
+    timeline: [
+      { title: 'Concept & 3D', sub: '3–4 weeks' },
+      { title: 'Material Selection', sub: '2 weeks' },
+      { title: 'Production', sub: '5–6 weeks' },
+      { title: 'Installation', sub: '4–5 weeks' },
+      { title: 'Finishing & Styling', sub: '2 weeks' },
+      { title: 'Handover', sub: 'Week 16–18' },
+    ],
+  },
+  {
+    name: 'Fast-Track 45 Days',
+    included: [
+      'BWP ply with laminate finishes from a ready material palette',
+      'Design consultation with 1 round of 3D revisions',
+      'Factory-made modular kitchen and wardrobes',
+      'Installation and basic site cleaning',
+      '1 year service warranty on workmanship',
+    ],
+    notIncluded: [
+      'Custom veneer, PU or stone finishes',
+      'Appliances, loose furniture and décor',
+      'Civil, plumbing, painting and flooring work',
+      'Design changes after production starts',
+      'Society / building permissions and charges',
+    ],
+    payments: [
+      { pct: 20, title: 'Booking', sub: 'On signing the agreement' },
+      { pct: 50, title: 'Production Start', sub: 'Design frozen, factory order placed' },
+      { pct: 25, title: 'Installation', sub: 'Material delivered to site' },
+      { pct: 5, title: 'Handover', sub: 'On completion' },
+    ],
+    timeline: [
+      { title: 'Design', sub: '1 week' },
+      { title: 'Production', sub: '3 weeks' },
+      { title: 'Installation', sub: '2 weeks' },
+      { title: 'Handover', sub: 'Day 45' },
+    ],
+  },
+];
+
+/** Rounds a rate to a tidy figure: nearest 5 under ₹500, 50 under ₹5,000, then 1,000. */
+function tidyRate(n) {
+  if (n <= 0) return 0;
+  const step = n < 500 ? 5 : n < 5000 ? 50 : 1000;
+  return Math.round(n / step) * step;
+}
+
+function buildSampleRateBook(spec) {
+  const base = seedCatalog();
+  const items = base.items.map(it => {
+    const out = Object.assign({}, it);
+    const r = spec.rates[it.name];
+    if (r) { out.rateStandard = r[0]; out.ratePremium = r[1]; out.rateLuxury = r[2]; }
+    else {
+      out.rateStandard = tidyRate(it.rateStandard * spec.factor);
+      out.ratePremium = it.ratePremium === null ? null : tidyRate(it.ratePremium * spec.factor);
+      out.rateLuxury = it.rateLuxury === null ? null : tidyRate(it.rateLuxury * spec.factor);
+    }
+    const q = spec.qty[it.name];
+    if (q) { out.qtyBhk1 = q[0]; out.qtyBhk2 = q[1]; out.qtyBhk3 = q[2]; out.qtyBhk4 = q[3]; }
+    return out;
+  });
+  let nextIdNum = items.reduce((m, i) => Math.max(m, i.id), 0) + 1;
+  (spec.add || []).forEach(a => {
+    const under = a[12] ? items.find(i => i.categoryId === a[0] && i.name === a[12] && i.parentId === null) : null;
+    items.push({
+      id: nextIdNum++, categoryId: a[0], parentId: under ? under.id : null, name: a[1], description: a[2], unit: a[3],
+      rateStandard: a[4], ratePremium: a[5], rateLuxury: a[6], qtyBhk1: a[7], qtyBhk2: a[8], qtyBhk3: a[9], qtyBhk4: a[10],
+      scalesWithArea: a[11], active: true, sortOrder: items.filter(i => i.categoryId === a[0]).length + 1,
+    });
+  });
+  return { categories: base.categories, items: items };
+}
+
+/** Sheet menu: adds 3 sample rate book versions and 3 sample terms versions (skips names that already exist). */
+function addSampleVersions() {
+  const sh = versionsSheet();
+  const have = readTable(TABS.versions).map(v => v.kind + '|' + v.name);
+  const now = new Date().toISOString();
+  const added = [];
+  const put = (kind, name, data, summary) => {
+    if (have.indexOf(kind + '|' + name) >= 0) return;
+    const v = { id: nextId(TABS.versions), kind: kind, name: name, createdAt: now, createdBy: 'Sample', updatedAt: now, summary: summary };
+    Object.assign(v, writeVersionData(data, name));
+    sh.appendRow(rowFor(TABS.versions, v));
+    added.push(name);
+  };
+  SAMPLE_RATEBOOKS.forEach(spec => {
+    const c = buildSampleRateBook(spec);
+    put('ratebook', spec.name, c, rateBookSummary(c) + ' · ' + spec.note);
+  });
+  SAMPLE_TERMS.forEach(t => {
+    const clean = cleanTerms(t);
+    put('terms', t.name, clean, termsSummary(clean));
+  });
+  const msg = added.length ? 'Added: ' + added.join(', ') : 'The sample versions are already there.';
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* run from the editor */ }
+  return { added: added };
+}
+
 /* ───────────────────────── Sheet menu & setup ───────────────────────── */
 
 function onOpen() {
@@ -710,6 +965,8 @@ function onOpen() {
     .addItem('2. Add or reset a user', 'addUserPrompt')
     .addItem('Remove a user', 'removeUserPrompt')
     .addItem('Sign everyone out', 'signOutAll')
+    .addSeparator()
+    .addItem('Add sample versions (for testing)', 'addSampleVersions')
     .addToUi();
 }
 
@@ -788,9 +1045,17 @@ function signOutAll() {
 }
 
 function seedRateBook(book) {
+  const c = seedCatalog();
+  c.categories.forEach(cat => book.getSheetByName('Categories').appendRow(rowFor(TABS.categories, cat)));
+  const rows = c.items.map(it => rowFor(TABS.items, Object.assign({}, it, { parentId: it.parentId === null ? '' : it.parentId })));
+  book.getSheetByName('Items').getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+/** The starter rate book (mid-market Kolkata rates, 2026) as { categories, items }. */
+function seedCatalog() {
   const cats = ['Living Room', 'Dining', 'Kitchen', 'Master Bedroom', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4',
     'Bathrooms', 'False Ceiling & Lighting', 'Painting & Finishes', 'Design & Services'];
-  cats.forEach((c, i) => book.getSheetByName('Categories').appendRow(rowFor(TABS.categories, { id: i + 1, name: c, sortOrder: i + 1 })));
+  const categories = cats.map((c, i) => ({ id: i + 1, name: c, sortOrder: i + 1 }));
 
   // [category, name, description, unit, std, prem, lux, 1BHK, 2BHK, 3BHK, 4BHK, scalesWithArea]
   // A nested add-on is written as { under: <main item name>, item: [...] } right after its main item.
@@ -852,11 +1117,11 @@ function seedRateBook(book) {
 
   const lastMain = {}; // `${cat}|${name}` → id
   const sortCount = {};
-  const rows = seed.map((entry, i) => {
+  const items = seed.map((entry, i) => {
     const nested = !Array.isArray(entry);
     const it = nested ? entry.item : entry;
     const id = i + 1;
-    let parentId = '';
+    let parentId = null;
     if (nested) {
       parentId = lastMain[it[0] + '|' + entry.under];
       if (!parentId) throw new Error('Seed: no main item "' + entry.under + '" before "' + it[1] + '"');
@@ -864,11 +1129,11 @@ function seedRateBook(book) {
       lastMain[it[0] + '|' + it[1]] = id;
     }
     sortCount[it[0]] = (sortCount[it[0]] || 0) + 1;
-    return rowFor(TABS.items, {
+    return {
       id: id, categoryId: it[0], parentId: parentId, name: it[1], description: it[2], unit: it[3],
       rateStandard: it[4], ratePremium: it[5], rateLuxury: it[6], qtyBhk1: it[7], qtyBhk2: it[8], qtyBhk3: it[9], qtyBhk4: it[10],
       scalesWithArea: it[11], active: true, sortOrder: sortCount[it[0]],
-    });
+    };
   });
-  book.getSheetByName('Items').getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  return { categories: categories, items: items };
 }
