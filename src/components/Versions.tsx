@@ -177,11 +177,11 @@ export function RateBookVersionBar() {
         </span>
       </div>
       <select className={`input ${styles.select}`} value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Rate book version">
-        {custom && <option value="custom">Custom (unsaved) · currently using</option>}
+        {custom && <option value="custom">Custom (unsaved)</option>}
         {choices.map((v) => (
           <option key={v.id} value={v.id}>
             {v.name}
-            {v.isActive ? " · currently using" : ""}
+            {v.isActive ? " ✓" : ""}
           </option>
         ))}
         {backups.length > 0 && (
@@ -189,7 +189,7 @@ export function RateBookVersionBar() {
             {backups.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
-                {v.isActive ? " · currently using" : ""}
+                {v.isActive ? " ✓" : ""}
               </option>
             ))}
           </optgroup>

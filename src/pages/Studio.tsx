@@ -28,11 +28,11 @@ export default function Studio() {
           <BrandMark size="sm" />
           <div className={styles.headerRight}>
             <Link to="/" className="btn btn-ghost">
-              <ArrowLeft size={16} /> Estimator
+              <ArrowLeft size={16} /> <span className="hide-xs">Estimator</span>
             </Link>
             {studioOpen && (
               <Button variant="ghost" onClick={lockStudio}>
-                <Lock size={16} /> Lock studio
+                <Lock size={16} /> <span className="hide-xs">Lock studio</span>
               </Button>
             )}
           </div>
@@ -550,14 +550,14 @@ function RateBookTab() {
                           {i.description}
                         </div>
                       </td>
-                      <td>{estimate.UNIT_LABEL[i.unit]}</td>
-                      <td className={styles.num}>{i.rateStandard ? estimate.formatNumber(i.rateStandard) : "Incl."}</td>
-                      <td className={styles.num}>{i.ratePremium == null ? "—" : estimate.formatNumber(i.ratePremium)}</td>
-                      <td className={styles.num}>{i.rateLuxury == null ? "—" : estimate.formatNumber(i.rateLuxury)}</td>
-                      <td className={styles.num}>{i.qtyBhk1}</td>
-                      <td className={styles.num}>{i.qtyBhk2}</td>
-                      <td className={styles.num}>{i.qtyBhk3}</td>
-                      <td className={styles.num}>{i.qtyBhk4}</td>
+                      <td data-label="Unit">{estimate.UNIT_LABEL[i.unit]}</td>
+                      <td className={styles.num} data-label="Standard ₹">{i.rateStandard ? estimate.formatNumber(i.rateStandard) : "Incl."}</td>
+                      <td className={styles.num} data-label="Premium ₹">{i.ratePremium == null ? "—" : estimate.formatNumber(i.ratePremium)}</td>
+                      <td className={styles.num} data-label="Luxury ₹">{i.rateLuxury == null ? "—" : estimate.formatNumber(i.rateLuxury)}</td>
+                      <td className={styles.num} data-label="1 BHK">{i.qtyBhk1}</td>
+                      <td className={styles.num} data-label="2 BHK">{i.qtyBhk2}</td>
+                      <td className={styles.num} data-label="3 BHK">{i.qtyBhk3}</td>
+                      <td className={styles.num} data-label="4 BHK">{i.qtyBhk4}</td>
                     </tr>
                   ))}
                   {items.length === 0 && (

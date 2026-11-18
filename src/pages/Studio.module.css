@@ -90,3 +90,38 @@
 .signToggle span { display: flex; flex-direction: column; gap: 2px; }
 .signToggle strong { font-weight: 600; font-size: 0.95rem; }
 .signToggle small { color: var(--muted-foreground); font-size: 0.82rem; }
+
+/* ───────── Tablets & phones ───────── */
+@media (max-width: 700px) {
+  .tabs { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex: 1 0 auto; padding: 10px 14px; }
+  .viewHead { align-items: stretch; }
+  .viewHead .tabs { width: 100%; }
+  .contractCard { flex-wrap: wrap; padding: var(--spacing-4); }
+  .ccRight { align-items: flex-start; flex-direction: row; gap: var(--spacing-3); align-items: baseline; }
+  .itemsTitle { font-size: 1.6rem; }
+  .editBar { flex-wrap: wrap; }
+  .editBar span { width: 100%; margin: 0; }
+  .formGrid { grid-template-columns: 1fr; }
+  .quad { grid-template-columns: repeat(2, 1fr); }
+  .gateTitle { font-size: 2.1rem; }
+  .settings { grid-template-columns: 1fr; }
+}
+
+/* Rate book rows become cards on phones: name on top, then unit + three rates, then qty per BHK */
+@media (max-width: 700px) {
+  .tableWrap { overflow: visible; }
+  .table thead { display: none; }
+  .table, .table tbody { display: block; }
+  .table tbody tr { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 6px; padding: 14px; border-bottom: 1px solid var(--border); }
+  .table td { display: flex; flex-direction: column; gap: 2px; padding: 0; border: none; text-align: left; font-variant-numeric: tabular-nums; }
+  .table td:first-child { grid-column: 1 / -1; margin-bottom: 4px; }
+  .table td[data-label]::before { content: attr(data-label); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
+  .table td:nth-child(n + 6) { background: var(--muted); border-radius: 6px; padding: 4px 8px; }
+  .num { text-align: left; }
+  .childRow { margin-left: 14px; border-left: 2px solid var(--accent-soft); }
+  .childRow td:first-child { padding-left: 0; }
+  .childRow td:first-child::before { display: none; }
+  .tab { padding: 10px 11px; font-size: 0.86rem; }
+}

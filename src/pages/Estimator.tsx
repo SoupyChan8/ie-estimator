@@ -182,6 +182,17 @@ export default function Estimator() {
             ))}
           </ol>
         )}
+        {step !== "done" && flowIndex >= 0 && (
+          <div className={styles.stepMobile} aria-hidden>
+            <span>
+              <b>{String(flowIndex + 1).padStart(2, "0")}</b> / {String(FLOW.length).padStart(2, "0")}
+            </span>
+            <span className={styles.stepMobileLabel}>{FLOW[flowIndex]?.label}</span>
+            <span className={styles.stepMobileBar}>
+              <span style={{ width: `${((flowIndex + 1) / FLOW.length) * 100}%` }} />
+            </span>
+          </div>
+        )}
       </header>
 
       <section className={styles.body}>

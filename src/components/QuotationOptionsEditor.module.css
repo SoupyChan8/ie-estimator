@@ -25,7 +25,19 @@
   .wrap { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .payRow { grid-template-columns: 80px 1fr 40px; }
-  .payRow input:nth-of-type(3) { grid-column: 2 / 3; }
-  .amt { grid-column: 1 / 2; grid-row: 2; text-align: left; }
+  .block { padding: var(--spacing-4); }
+  .head { flex-wrap: wrap; }
+  .head h3 { font-size: 1.25rem; flex-basis: 100%; }
+  /* pct | stage | delete, then amount | when */
+  .payRow { grid-template-columns: 84px 1fr 40px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .payRow > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .payRow > :nth-child(2) { grid-column: 2; grid-row: 1; }
+  .payRow > :nth-child(5) { grid-column: 3; grid-row: 1; }
+  .payRow > :nth-child(4) { grid-column: 1; grid-row: 2; text-align: left; font-size: 0.8rem; }
+  .payRow > :nth-child(3) { grid-column: 2 / -1; grid-row: 2; }
+  /* number | phase | delete, then duration */
+  .timeRow { grid-template-columns: 30px 1fr 40px; }
+  .timeRow > :nth-child(3) { grid-column: 2; grid-row: 2; }
+  .timeRow > :nth-child(4) { grid-column: 3; grid-row: 1; }
+  .pointRow { grid-template-columns: 22px 1fr 36px; gap: 6px; }
 }

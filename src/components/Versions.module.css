@@ -30,6 +30,11 @@
 .nameInput { flex: 1; font-size: 1.15rem; }
 
 @media (max-width: 760px) {
+  .rbBar, .bar { align-items: stretch; }
+  .rbBar .select, .bar .select { flex: 1 1 100%; min-width: 0; }
+  .rbName { max-width: none; }
+  .sep { display: none; }
+  .editorOverlay { padding: var(--spacing-3); }
   .head, .row { flex-direction: column; align-items: stretch; }
   .actions { justify-content: flex-start; }
   .editorHead { flex-wrap: wrap; }
@@ -44,3 +49,6 @@
 .usingTag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--success); padding: 6px 12px; border-radius: var(--radius-full); background: #dfe6dc; }
 .rbName { flex-wrap: wrap; max-width: 300px; row-gap: 4px; }
 .rbBar .select { min-width: 200px; flex: 0 1 260px; }
+@media (max-width: 760px) {
+  .rbBar .select, .bar .select { flex: 1 1 100%; min-width: 0; }
+}
