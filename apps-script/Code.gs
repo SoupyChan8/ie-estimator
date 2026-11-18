@@ -12,7 +12,9 @@
 const TABS = { categories: 'Categories', items: 'Items', contracts: 'Contracts', users: 'Users' };
 const COLS = {
   Categories: ['id', 'name', 'sortOrder'],
-  Items: ['id', 'categoryId', 'name', 'description', 'unit', 'rateStandard', 'ratePremium', 'rateLuxury',
+  // parentId: blank for a main item; the id of another item in the same category for a nested add-on
+  // (e.g. Puja Unit and Crockery Display nested under TV Unit). One level of nesting.
+  Items: ['id', 'categoryId', 'parentId', 'name', 'description', 'unit', 'rateStandard', 'ratePremium', 'rateLuxury',
     'qtyBhk1', 'qtyBhk2', 'qtyBhk3', 'qtyBhk4', 'scalesWithArea', 'active', 'sortOrder'],
   Contracts: ['id', 'quotationNo', 'createdAt', 'clientName', 'clientPhone', 'clientEmail', 'siteAddress',
     'projectScope', 'bhk', 'carpetArea', 'tier', 'total', 'designerName', 'createdBy', 'lineItemsJson',
@@ -60,7 +62,7 @@ function doPost(e) {
       case 'saveCategory': return json(withLock(() => saveCategory(p)));
       case 'deleteCategory': return json(withLock(() => deleteCategory(Number(p.id))));
       case 'saveItem': return json(withLock(() => saveItem(p)));
-      case 'deleteItem': return json(withLock(() => deleteRowById(TABS.items, Number(p.id))));
+      case 'deleteItem': return json(withLock(() => deleteItem(Number(p.id))));
       case 'savePdf': return json(withLock(() => savePdf(p)));
       case 'changePassword': return json(changePassword(session, p.currentPassword, p.newPassword));
     }
@@ -157,11 +159,14 @@ function changePassword(session, currentPassword, newPassword) {
   return withLock(() => {
     const sheet = sheetOf(TABS.users);
     const rows = sheet.getDataRange().getValues();
+    const head = headersOf(TABS.users);
+    const E = head.indexOf('email'), H = head.indexOf('passwordHash'), S = head.indexOf('salt');
     for (let r = 1; r < rows.length; r++) {
-      if (String(rows[r][0]).trim().toLowerCase() === session.email) {
-        if (hashPassword(String(currentPassword || ''), rows[r][3]) !== rows[r][2]) return { error: 'Current password is wrong.' };
+      if (String(rows[r][E]).trim().toLowerCase() === session.email) {
+        if (hashPassword(String(currentPassword || ''), rows[r][S]) !== rows[r][H]) return { error: 'Current password is wrong.' };
         const salt = Utilities.getUuid();
-        sheet.getRange(r + 1, 3, 1, 2).setValues([[hashPassword(newPassword, salt), salt]]);
+        sheet.getRange(r + 1, H + 1).setValue(hashPassword(newPassword, salt));
+        sheet.getRange(r + 1, S + 1).setValue(salt);
         return { ok: true };
       }
     }
@@ -192,12 +197,27 @@ function readTable(name) {
   });
 }
 
+/** Row values in the sheet's own column order, so columns can be moved or added in the Sheet. */
+function headersOf(name) {
+  const sh = sheetOf(name);
+  return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+}
+
 function rowFor(name, obj) {
-  return COLS[name].map(c => (obj[c] === undefined || obj[c] === null ? '' : obj[c]));
+  return headersOf(name).map(c => (obj[c] === undefined || obj[c] === null ? '' : obj[c]));
+}
+
+function colOf(name, key) {
+  const i = headersOf(name).indexOf(key);
+  if (i < 0) throw new Error('Column "' + key + '" missing in sheet "' + name + '". Run Estimator → Set up sheets.');
+  return i + 1;
 }
 
 function findRowIndex(name, id) {
-  const ids = sheetOf(name).getRange(1, 1, sheetOf(name).getLastRow(), 1).getValues();
+  const sh = sheetOf(name);
+  const col = headersOf(name).indexOf('id') + 1;
+  if (col < 1 || sh.getLastRow() < 2) return -1;
+  const ids = sh.getRange(1, col, sh.getLastRow(), 1).getValues();
   for (let r = 1; r < ids.length; r++) if (Number(ids[r][0]) === id) return r + 1;
   return -1;
 }
@@ -225,7 +245,8 @@ function getCatalog() {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
   const items = readTable(TABS.items)
     .map(i => ({
-      id: Number(i.id), categoryId: Number(i.categoryId), name: String(i.name), description: String(i.description || ''),
+      id: Number(i.id), categoryId: Number(i.categoryId), parentId: numOrNull(i.parentId),
+      name: String(i.name), description: String(i.description || ''),
       unit: UNITS.indexOf(i.unit) >= 0 ? i.unit : 'sqft',
       rateStandard: num(i.rateStandard), ratePremium: numOrNull(i.ratePremium), rateLuxury: numOrNull(i.rateLuxury),
       qtyBhk1: num(i.qtyBhk1), qtyBhk2: num(i.qtyBhk2), qtyBhk3: num(i.qtyBhk3), qtyBhk4: num(i.qtyBhk4),
@@ -241,7 +262,7 @@ function saveCategory(p) {
   if (p.id) {
     const row = findRowIndex(TABS.categories, Number(p.id));
     if (row < 0) throw new Error('Category not found.');
-    sheetOf(TABS.categories).getRange(row, 2).setValue(name);
+    sheetOf(TABS.categories).getRange(row, colOf(TABS.categories, 'name')).setValue(name);
     return { id: Number(p.id) };
   }
   const id = nextId(TABS.categories);
@@ -253,15 +274,38 @@ function saveCategory(p) {
 function deleteCategory(id) {
   const sheet = sheetOf(TABS.items);
   const values = sheet.getDataRange().getValues();
-  for (let r = values.length - 1; r >= 1; r--) if (Number(values[r][1]) === id) sheet.deleteRow(r + 1);
+  const catCol = headersOf(TABS.items).indexOf('categoryId');
+  for (let r = values.length - 1; r >= 1; r--) if (Number(values[r][catCol]) === id) sheet.deleteRow(r + 1);
   return deleteRowById(TABS.categories, id);
+}
+
+/** Deletes an item and anything nested under it. */
+function deleteItem(id) {
+  const sheet = sheetOf(TABS.items);
+  const values = sheet.getDataRange().getValues();
+  const head = headersOf(TABS.items);
+  const idCol = head.indexOf('id'), parentCol = head.indexOf('parentId');
+  for (let r = values.length - 1; r >= 1; r--) {
+    if (Number(values[r][idCol]) === id || (parentCol >= 0 && Number(values[r][parentCol]) === id)) sheet.deleteRow(r + 1);
+  }
+  return { ok: true };
 }
 
 function saveItem(p) {
   const name = String(p.name || '').trim();
   if (!name) throw new Error('Item name is required.');
+  const all = readTable(TABS.items);
+  let parentId = p.parentId === null || p.parentId === undefined || p.parentId === '' ? '' : Number(p.parentId);
+  if (parentId !== '') {
+    const parent = all.find(i => Number(i.id) === parentId);
+    if (!parent) throw new Error('The main item it is nested under no longer exists.');
+    if (parent.parentId !== '' && parent.parentId !== null) throw new Error('Add-ons can only be nested one level deep.');
+    if (p.id && Number(p.id) === parentId) throw new Error('An item cannot be nested under itself.');
+    if (p.id && all.some(i => Number(i.parentId) === Number(p.id))) throw new Error('This item has its own add-ons, so it cannot be nested under another item.');
+    p.categoryId = Number(parent.categoryId);
+  }
   const item = {
-    categoryId: Number(p.categoryId), name: name, description: String(p.description || '').trim(),
+    categoryId: Number(p.categoryId), parentId: parentId, name: name, description: String(p.description || '').trim(),
     unit: UNITS.indexOf(p.unit) >= 0 ? p.unit : 'sqft',
     rateStandard: Math.max(0, num(p.rateStandard)),
     ratePremium: p.ratePremium === null || p.ratePremium === '' ? '' : Math.max(0, num(p.ratePremium)),
@@ -273,14 +317,21 @@ function saveItem(p) {
   if (p.id) {
     const row = findRowIndex(TABS.items, Number(p.id));
     if (row < 0) throw new Error('Item not found.');
-    const old = sheet.getRange(row, 1, 1, COLS.Items.length).getValues()[0];
+    const old = all.find(i => Number(i.id) === Number(p.id));
     item.id = Number(p.id);
-    item.sortOrder = old[COLS.Items.indexOf('sortOrder')];
-    sheet.getRange(row, 1, 1, COLS.Items.length).setValues([rowFor(TABS.items, item)]);
+    item.sortOrder = old ? old.sortOrder : 0;
+    const width = headersOf(TABS.items).length;
+    sheet.getRange(row, 1, 1, width).setValues([rowFor(TABS.items, item)]);
+    // Add-ons follow their main item into a new category.
+    const head = headersOf(TABS.items);
+    const values = sheet.getDataRange().getValues();
+    for (let r = 1; r < values.length; r++) {
+      if (Number(values[r][head.indexOf('parentId')]) === item.id) sheet.getRange(r + 1, head.indexOf('categoryId') + 1).setValue(item.categoryId);
+    }
     return { id: item.id };
   }
   item.id = nextId(TABS.items);
-  item.sortOrder = readTable(TABS.items).filter(i => Number(i.categoryId) === item.categoryId)
+  item.sortOrder = all.filter(i => Number(i.categoryId) === item.categoryId)
     .reduce((m, i) => Math.max(m, num(i.sortOrder)), 0) + 1;
   sheet.appendRow(rowFor(TABS.items, item));
   return { id: item.id };
@@ -326,7 +377,8 @@ function saveContract(p, session) {
     const qty = Math.max(0, num(l.qty));
     const rate = Math.max(0, num(l.rate));
     return {
-      itemId: Number(l.itemId), categoryName: String(l.categoryName || '').slice(0, 200),
+      itemId: Number(l.itemId), parentItemId: l.parentItemId === null || l.parentItemId === undefined ? null : Number(l.parentItemId),
+      categoryName: String(l.categoryName || '').slice(0, 200),
       name: String(l.name || '').slice(0, 300), description: String(l.description || '').slice(0, 1000),
       unit: UNITS.indexOf(l.unit) >= 0 ? l.unit : 'sqft', qty: qty, rate: rate, amount: Math.round(qty * rate),
     };
@@ -410,11 +462,12 @@ function savePdf(p) {
   const name = String(p.filename || 'Quotation.pdf').replace(/[\\/:*?"<>|]/g, '-').slice(0, 150);
   const blob = Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', name);
   const sheet = sheetOf(TABS.contracts);
-  const pdfCol = COLS.Contracts.indexOf('pdfFileId') + 1;
+  const pdfCol = colOf(TABS.contracts, 'pdfFileId');
   const oldId = sheet.getRange(row, pdfCol).getValue();
   if (oldId) { try { DriveApp.getFileById(oldId).setTrashed(true); } catch (e) { /* ignore */ } }
   const file = folder('PDF_FOLDER_ID', 'Quotations').createFile(blob);
-  sheet.getRange(row, pdfCol, 1, 2).setValues([[file.getId(), file.getUrl()]]);
+  sheet.getRange(row, pdfCol).setValue(file.getId());
+  sheet.getRange(row, colOf(TABS.contracts, 'pdfUrl')).setValue(file.getUrl());
   return { url: file.getUrl() };
 }
 
@@ -439,7 +492,11 @@ function setupSheets() {
     if (sh.getLastRow() === 0) {
       sh.appendRow(COLS[name]);
       sh.setFrozenRows(1);
-      sh.getRange(1, 1, 1, COLS[name].length).setFontWeight('bold').setBackground('#e6dfd2');
+      sh.getRange(1, 1, 1, COLS[name].length).setFontWeight('bold').setBackground('#dcd3c2');
+    } else {
+      // Upgrading an older sheet: add any new columns at the end.
+      const have = headersOf(name);
+      COLS[name].filter(c => have.indexOf(c) < 0).forEach(c => sh.getRange(1, sh.getLastColumn() + 1).setValue(c).setFontWeight('bold'));
     }
   });
   const users = book.getSheetByName('Users');
@@ -466,10 +523,11 @@ function addUserPrompt() {
 
   const sheet = sheetOf(TABS.users);
   const salt = Utilities.getUuid();
-  const row = [email, n.getResponseText().trim() || email, hashPassword(password, salt), salt, true];
+  const row = rowFor(TABS.users, { email: email, name: n.getResponseText().trim() || email, passwordHash: hashPassword(password, salt), salt: salt, active: true });
   const values = sheet.getDataRange().getValues();
+  const E = headersOf(TABS.users).indexOf('email');
   for (let r = 1; r < values.length; r++) {
-    if (String(values[r][0]).trim().toLowerCase() === email) {
+    if (String(values[r][E]).trim().toLowerCase() === email) {
       sheet.getRange(r + 1, 1, 1, row.length).setValues([row]);
       ui.alert('Password reset for ' + email + '.');
       return;
@@ -486,8 +544,9 @@ function removeUserPrompt() {
   const email = e.getResponseText().trim().toLowerCase();
   const sheet = sheetOf(TABS.users);
   const values = sheet.getDataRange().getValues();
+  const E = headersOf(TABS.users).indexOf('email');
   for (let r = values.length - 1; r >= 1; r--) {
-    if (String(values[r][0]).trim().toLowerCase() === email) sheet.deleteRow(r + 1);
+    if (String(values[r][E]).trim().toLowerCase() === email) sheet.deleteRow(r + 1);
   }
   ui.alert(email + ' removed. Their sessions end on their next request.');
 }
@@ -501,40 +560,47 @@ function signOutAll() {
 function seedRateBook(book) {
   const cats = ['Living Room', 'Dining', 'Kitchen', 'Master Bedroom', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4',
     'Bathrooms', 'False Ceiling & Lighting', 'Painting & Finishes', 'Design & Services'];
-  book.getSheetByName('Categories').getRange(2, 1, cats.length, 3)
-    .setValues(cats.map((c, i) => [i + 1, c, i + 1]));
+  cats.forEach((c, i) => book.getSheetByName('Categories').appendRow(rowFor(TABS.categories, { id: i + 1, name: c, sortOrder: i + 1 })));
 
-  // [cat, name, description, unit, std, prem, lux, q1, q2, q3, q4, scales]
-  const W = 'Sliding / hinged wardrobe, floor to loft';
+  // [category, name, description, unit, std, prem, lux, 1BHK, 2BHK, 3BHK, 4BHK, scalesWithArea]
+  // A nested add-on is written as { under: <main item name>, item: [...] } right after its main item.
+  const W = 'Sliding / hinged wardrobe up to the ceiling';
   const H = 'Upholstered / fluted headboard wall';
   const S = 'Wall-mounted desk with shelves';
-  const items = [
-    [1, 'TV Unit with Puja & Crockery', 'Feature wall unit with puja niche, crockery display and back-lit panelling', 'sqft', 1150, 1550, 2150, 70, 85, 95, 110, false],
+  const L = (cat) => ({ under: 'Wardrobe', item: [cat, 'Wardrobe Loft', 'Loft storage above the wardrobe', 'sqft', 900, 1200, 1700, 0, 12, 14, 14, false] });
+  const seed = [
+    [1, 'TV Unit', 'Feature TV wall with back-lit panelling', 'sqft', 950, 1300, 1800, 45, 55, 60, 70, false],
+    { under: 'TV Unit', item: [1, 'Puja Unit', 'Puja niche with back-lit jali and drawers', 'sqft', 1200, 1650, 2300, 12, 14, 15, 18, false] },
+    { under: 'TV Unit', item: [1, 'Crockery Display', 'Glass-fronted crockery display with profile lights', 'sqft', 1150, 1550, 2150, 15, 18, 20, 22, false] },
+    { under: 'TV Unit', item: [1, 'Hidden Sliding Door', 'Concealed sliding door integrated in the panelling', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false] },
     [1, 'Louver Wall Panelling', 'Fluted louvers on the feature / passage wall', 'sqft', 750, 1050, 1500, 30, 38, 43, 52, false],
     [1, 'Partition with Showpiece Sections', 'Open partition with display shelves', 'sqft', 950, 1300, 1850, 25, 32, 38, 45, false],
-    [1, 'Sofa with Ottomans', 'Custom sofa with 2 × 2 ottoman', 'nos', 40000, 65000, 115000, 1, 1, 1, 1, false],
+    [1, 'Sofa', 'Custom sofa', 'nos', 34000, 56000, 100000, 1, 1, 1, 1, false],
+    { under: 'Sofa', item: [1, 'Ottomans (2 × 2)', 'Pair of matching ottomans', 'nos', 6000, 9000, 15000, 1, 1, 1, 1, false] },
     [1, 'Seating with Storage', 'Built-in seating with underneath storage', 'sqft', 850, 1150, 1650, 10, 12, 13, 15, false],
     [1, 'Foyer & Shoe Unit', 'Concealed shoe storage with seating ledge', 'sqft', 1050, 1400, 1950, 12, 15, 18, 20, false],
-    [1, 'Hidden Sliding Door', 'Concealed sliding door integrated in panelling', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
     [2, 'Crockery Unit', 'Glass-fronted crockery and storage unit', 'sqft', 1150, 1550, 2150, 18, 24, 28, 32, false],
     [2, 'Dining Table Set', 'Dining table with chairs', 'nos', 35000, 60000, 110000, 1, 1, 1, 1, false],
     [2, 'Bar / Coffee Counter', 'Compact counter with bottle and glass storage', 'sqft', 1200, 1650, 2300, 0, 0, 12, 15, false],
-    [3, 'Modular Kitchen – Base & Wall Units', 'Carcass, shutters and soft-close hardware', 'rft', 7500, 10500, 15500, 10, 12, 14, 16, false],
-    [3, 'Tall Unit', 'Pantry / appliance tall unit', 'sqft', 1200, 1650, 2300, 0, 14, 16, 18, false],
-    [3, 'Countertop', 'Granite (Standard) · Quartz (Premium) · Solid surface (Luxury)', 'rft', 1200, 2200, 3800, 10, 12, 14, 16, false],
-    [3, 'Kitchen Dado', 'Backsplash tiles above the counter', 'sqft', 180, 320, 650, 30, 36, 42, 48, false],
+    [3, 'Modular Kitchen', 'Base and wall units with soft-close hardware', 'rft', 7500, 10500, 15500, 10, 12, 14, 16, false],
+    { under: 'Modular Kitchen', item: [3, 'Tall Unit', 'Pantry / appliance tall unit', 'sqft', 1200, 1650, 2300, 0, 14, 16, 18, false] },
+    { under: 'Modular Kitchen', item: [3, 'Countertop', 'Granite (Standard) · Quartz (Premium) · Solid surface (Luxury)', 'rft', 1200, 2200, 3800, 10, 12, 14, 16, false] },
+    { under: 'Modular Kitchen', item: [3, 'Kitchen Dado', 'Backsplash tiles above the counter', 'sqft', 180, 320, 650, 30, 36, 42, 48, false] },
     [4, 'Wardrobe', W, 'sqft', 1100, 1500, 2100, 49, 56, 56, 63, false],
+    L(4),
     [4, 'Bed with Hydraulic Storage', 'King size bed with hydraulic storage', 'nos', 38000, 62000, 105000, 1, 1, 1, 1, false],
-    [4, 'Bedside Tables (Pair)', 'Pair of bedside tables', 'nos', 12000, 20000, 35000, 1, 1, 1, 1, false],
+    { under: 'Bed with Hydraulic Storage', item: [4, 'Bedside Tables (Pair)', 'Pair of bedside tables', 'nos', 12000, 20000, 35000, 1, 1, 1, 1, false] },
     [4, 'Dresser with Mirror', 'Dresser unit with mirror and drawers', 'sqft', 1150, 1550, 2150, 12, 14, 14, 16, false],
     [4, 'Headboard Wall Panelling', H, 'sqft', 650, 950, 1400, 40, 48, 48, 56, false],
     [4, 'Study / Work Desk', S, 'sqft', 1050, 1400, 1950, 0, 10, 12, 12, false],
     [5, 'Wardrobe', W, 'sqft', 1100, 1500, 2100, 0, 42, 49, 49, false],
+    L(5),
     [5, 'Bed with Storage', 'Queen size bed with storage', 'nos', 32000, 52000, 88000, 0, 1, 1, 1, false],
-    [5, 'Bedside Tables (Pair)', 'Pair of bedside tables', 'nos', 10000, 17000, 30000, 0, 1, 1, 1, false],
+    { under: 'Bed with Storage', item: [5, 'Bedside Tables (Pair)', 'Pair of bedside tables', 'nos', 10000, 17000, 30000, 0, 1, 1, 1, false] },
     [5, 'Headboard Wall Panelling', H, 'sqft', 650, 950, 1400, 0, 36, 40, 40, false],
     [5, 'Study / Work Desk', S, 'sqft', 1050, 1400, 1950, 0, 10, 10, 10, false],
     [6, 'Wardrobe', W, 'sqft', 1100, 1500, 2100, 0, 0, 42, 49, false],
+    L(6),
     [6, 'Bed with Storage', 'Queen size bed with storage', 'nos', 32000, 52000, 88000, 0, 0, 1, 1, false],
     [6, 'Headboard Wall Panelling', H, 'sqft', 650, 950, 1400, 0, 0, 36, 40, false],
     [6, 'Study / Work Desk', S, 'sqft', 1050, 1400, 1950, 0, 0, 10, 10, false],
@@ -542,9 +608,9 @@ function seedRateBook(book) {
     [7, 'Bed with Storage', 'Queen size bed with storage', 'nos', 32000, 52000, 88000, 0, 0, 0, 1, false],
     [7, 'Headboard Wall Panelling', H, 'sqft', 650, 950, 1400, 0, 0, 0, 36, false],
     [8, 'Vanity Unit', 'Wall-hung vanity with storage', 'nos', 14000, 24000, 42000, 1, 2, 3, 3, false],
-    [8, 'Mirror Cabinet with Light', 'Mirror cabinet with back-lighting', 'nos', 6000, 11000, 20000, 1, 2, 3, 3, false],
+    { under: 'Vanity Unit', item: [8, 'Mirror Cabinet with Light', 'Mirror cabinet with back-lighting', 'nos', 6000, 11000, 20000, 1, 2, 3, 3, false] },
     [9, 'Gypsum False Ceiling', 'Minimalist gypsum ceiling with recesses', 'sqft', 115, 150, 220, 300, 520, 780, 1100, true],
-    [9, 'Cove / Profile Lighting', 'LED cove and profile light runs', 'rft', 180, 320, 550, 60, 100, 140, 190, true],
+    { under: 'Gypsum False Ceiling', item: [9, 'Cove / Profile Lighting', 'LED cove and profile light runs', 'rft', 180, 320, 550, 60, 100, 140, 190, true] },
     [9, 'Electrical Labour & Wiring', 'Rewiring, points and ceiling light wiring', 'sqft', 45, 65, 95, 450, 750, 1100, 1600, true],
     [9, 'Light Fixtures', 'Spot lights, panels and LED strips', 'sqft', 40, 85, 160, 450, 750, 1100, 1600, true],
     [10, 'Interior Painting', 'Putty, primer and two coats on walls & ceiling', 'sqft', 22, 35, 60, 1350, 2250, 3300, 4800, true],
@@ -553,10 +619,26 @@ function seedRateBook(book) {
     [11, 'Project Management & Supervision', 'Site supervision through to handover', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
     [11, 'Site Cleaning & Debris Removal', 'Cleaning and removing debris at handover', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
   ];
+
+  const lastMain = {}; // `${cat}|${name}` → id
   const sortCount = {};
-  const rows = items.map((it, i) => {
+  const rows = seed.map((entry, i) => {
+    const nested = !Array.isArray(entry);
+    const it = nested ? entry.item : entry;
+    const id = i + 1;
+    let parentId = '';
+    if (nested) {
+      parentId = lastMain[it[0] + '|' + entry.under];
+      if (!parentId) throw new Error('Seed: no main item "' + entry.under + '" before "' + it[1] + '"');
+    } else {
+      lastMain[it[0] + '|' + it[1]] = id;
+    }
     sortCount[it[0]] = (sortCount[it[0]] || 0) + 1;
-    return [i + 1, it[0], it[1], it[2], it[3], it[4], it[5], it[6], it[7], it[8], it[9], it[10], it[11], true, sortCount[it[0]]];
+    return rowFor(TABS.items, {
+      id: id, categoryId: it[0], parentId: parentId, name: it[1], description: it[2], unit: it[3],
+      rateStandard: it[4], ratePremium: it[5], rateLuxury: it[6], qtyBhk1: it[7], qtyBhk2: it[8], qtyBhk3: it[9], qtyBhk4: it[10],
+      scalesWithArea: it[11], active: true, sortOrder: sortCount[it[0]],
+    });
   });
   book.getSheetByName('Items').getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 }
