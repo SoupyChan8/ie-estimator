@@ -264,6 +264,7 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
 type ItemDraft = {
   id?: number;
   categoryId: number;
+  parentId: number | null;
   name: string;
   description: string;
   unit: RateUnit;
@@ -281,6 +282,7 @@ type ItemDraft = {
 const toDraft = (i: CatalogItem): ItemDraft => ({
   id: i.id,
   categoryId: i.categoryId,
+  parentId: i.parentId,
   name: i.name,
   description: i.description,
   unit: i.unit,
@@ -295,8 +297,9 @@ const toDraft = (i: CatalogItem): ItemDraft => ({
   active: i.active,
 });
 
-const blankDraft = (categoryId: number): ItemDraft => ({
+const blankDraft = (categoryId: number, parentId: number | null = null): ItemDraft => ({
   categoryId,
+  parentId,
   name: "",
   description: "",
   unit: "sqft",
@@ -344,7 +347,7 @@ function RateBookTab() {
   );
 
   if (!catalog) return <Skeleton style={{ height: 400 }} />;
-  const items = activeCat ? catalog.items.filter((i) => i.categoryId === activeCat.id) : [];
+  const items = activeCat ? estimate.orderItems(catalog.items.filter((i) => i.categoryId === activeCat.id)) : [];
 
   const submitCat = async () => {
     if (!catDialog?.name.trim()) return;
@@ -425,9 +428,27 @@ function RateBookTab() {
                 </thead>
                 <tbody>
                   {items.map((i) => (
-                    <tr key={i.id} onClick={() => setDraft(toDraft(i))} className={!i.active ? styles.inactive : ""}>
+                    <tr
+                      key={i.id}
+                      onClick={() => setDraft(toDraft(i))}
+                      className={`${!i.active ? styles.inactive : ""} ${i.parentId != null ? styles.childRow : ""}`}
+                    >
                       <td>
-                        <div className={styles.itemName}>{i.name}</div>
+                        <div className={styles.itemName}>
+                          {i.parentId != null && <span className={styles.addonMark}>Add-on</span>}
+                          {i.name}
+                          {i.parentId == null && (
+                            <button
+                              className={styles.addAddon}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDraft(blankDraft(i.categoryId, i.id));
+                              }}
+                            >
+                              <Plus size={12} /> Add-on
+                            </button>
+                          )}
+                        </div>
                         <div className={styles.itemDesc}>
                           {i.scalesWithArea && <span className={styles.pill}>scales with area</span>}
                           {!i.active && <span className={styles.pill}>hidden</span>}
@@ -469,6 +490,7 @@ function RateBookTab() {
           draft={draft}
           setDraft={setDraft}
           categories={catalog.categories}
+          items={catalog.items}
           busy={busy}
           onSave={async (payload) => {
             if (await run(() => api("saveItem", payload), draft.id ? "Item updated" : "Item added", "Couldn't save item")) setDraft(null);
@@ -512,12 +534,17 @@ function ItemDialog(props: {
   draft: ItemDraft;
   setDraft: React.Dispatch<React.SetStateAction<ItemDraft | null>>;
   categories: { id: number; name: string }[];
+  items: CatalogItem[];
   busy: boolean;
   onSave: (payload: Record<string, unknown>) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
-  const { draft, setDraft, categories, busy, onSave, onDelete, onClose } = props;
+  const { draft, setDraft, categories, items, busy, onSave, onDelete, onClose } = props;
+  const hasAddons = draft.id != null && items.some((i) => i.parentId === draft.id);
+  const parentOptions = estimate.orderItems(
+    items.filter((i) => i.categoryId === draft.categoryId && i.parentId == null && i.id !== draft.id),
+  );
   const set = <K extends keyof ItemDraft>(k: K, v: ItemDraft[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
   const numTxt = (k: keyof ItemDraft) => ({
     inputMode: "decimal" as const,
@@ -529,6 +556,7 @@ function ItemDialog(props: {
     onSave({
       id: draft.id,
       categoryId: draft.categoryId,
+      parentId: draft.parentId,
       name: draft.name.trim(),
       description: draft.description.trim(),
       unit: draft.unit,
@@ -547,7 +575,7 @@ function ItemDialog(props: {
     <Modal
       open
       onClose={onClose}
-      title={draft.id ? "Edit item" : "New item"}
+      title={draft.id ? "Edit item" : draft.parentId != null ? "New add-on" : "New item"}
       className={styles.itemDialog}
       footer={
         <div className={styles.dialogFoot}>
@@ -580,13 +608,34 @@ function ItemDialog(props: {
         </label>
         <label className={styles.field}>
           <span>Category</span>
-          <select className="input" value={draft.categoryId} onChange={(e) => set("categoryId", Number(e.target.value))}>
+          <select
+            className="input"
+            value={draft.categoryId}
+            onChange={(e) => setDraft((d) => (d ? { ...d, categoryId: Number(e.target.value), parentId: null } : d))}
+          >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
           </select>
+        </label>
+        <label className={styles.field}>
+          <span>Nested under</span>
+          <select
+            className="input"
+            value={draft.parentId ?? ""}
+            disabled={hasAddons}
+            onChange={(e) => set("parentId", e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">— Main item —</option>
+            {parentOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                Add-on of: {p.name}
+              </option>
+            ))}
+          </select>
+          {hasAddons && <small className={styles.fieldHint}>This item has its own add-ons, so it stays a main item.</small>}
         </label>
         <label className={styles.field}>
           <span>Unit</span>

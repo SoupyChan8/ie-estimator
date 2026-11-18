@@ -51,7 +51,14 @@
 .table tbody tr:hover { background: var(--accent-soft); }
 .inactive { opacity: 0.5; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.itemName { font-weight: 600; }
+.itemName { font-weight: 600; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.childRow td:first-child { padding-left: 34px; position: relative; }
+.childRow td:first-child::before { content: ""; position: absolute; left: 16px; top: 0; bottom: 50%; width: 10px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.childRow .itemName { font-weight: 500; }
+.addonMark { font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--oxide); font-weight: 600; }
+.addAddon { display: inline-flex; align-items: center; gap: 3px; border: 1px dashed var(--muted-foreground); background: transparent; border-radius: var(--radius-full); padding: 2px 8px; font-size: 0.72rem; font-weight: 500; color: var(--muted-foreground); cursor: pointer; }
+.addAddon:hover { border-color: var(--oxide); color: var(--oxide); }
+.fieldHint { font-size: 0.75rem; color: var(--muted-foreground); }
 .itemDesc { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 2px; }
 .pill { display: inline-block; font-size: 0.68rem; padding: 1px 7px; margin-right: 6px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--foreground); }
 

@@ -6,6 +6,8 @@ export type CatalogCategory = { id: number; name: string; sortOrder: number };
 export type CatalogItem = {
   id: number;
   categoryId: number;
+  /** Set for a nested add-on (e.g. Puja Unit under TV Unit). One level only. */
+  parentId: number | null;
   name: string;
   description: string;
   unit: RateUnit;
@@ -25,6 +27,7 @@ export type Catalog = { categories: CatalogCategory[]; items: CatalogItem[] };
 
 export type LineItem = {
   itemId: number;
+  parentItemId?: number | null;
   categoryName: string;
   name: string;
   description: string;
@@ -60,20 +63,23 @@ export type ContractFull = ContractSummary & {
 
 const REF_AREA: Record<number, number> = { 1: 450, 2: 750, 3: 1100, 4: 1600 };
 
-const TIERS: Record<Tier, { label: string; tagline: string; materials: string[] }> = {
+const TIERS: Record<Tier, { label: string; tag: string; tagline: string; materials: string[] }> = {
   standard: {
     label: "Standard",
-    tagline: "Smart, durable and beautifully finished",
+    tag: "Value focused",
+    tagline: "Functional designs with practical materials and finishes.",
     materials: ["BWP anti-termite ply", "Sunmica laminate, inside & out", "Soft-close hinges & channels", "Gypsum ceiling with warm LED"],
   },
   premium: {
     label: "Premium",
-    tagline: "Richer finishes and branded hardware",
+    tag: "Most popular",
+    tagline: "Elegant materials, refined details and a premium finish.",
     materials: ["BWP anti-termite ply", "Acrylic / high-gloss & textured laminates", "Hettich soft-close hardware", "Profile & cove lighting"],
   },
   luxury: {
     label: "Luxury",
-    tagline: "Bespoke, crafted, statement-making",
+    tag: "High-end",
+    tagline: "Bespoke detailing, upgraded materials and elevated finishes.",
     materials: ["Marine-grade ply", "PU, veneer & fluted finishes", "Blum / Häfele premium hardware", "Designer lighting & stone accents"],
   },
 };
@@ -105,17 +111,34 @@ function categoryApplies(items: CatalogItem[], bhk: number): boolean {
   return items.some((i) => i.active && baseQty(i, bhk) > 0);
 }
 
+/** Items in display order: each main item followed by its nested add-ons. */
+function orderItems(items: CatalogItem[], categories?: CatalogCategory[]): CatalogItem[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const catOrder = new Map((categories ?? []).map((c) => [c.id, c.sortOrder]));
+  const key = (i: CatalogItem): [number, number, number, number, number] => {
+    const parent = i.parentId != null ? byId.get(i.parentId) : undefined;
+    const main = parent ?? i;
+    return [catOrder.get(i.categoryId) ?? i.categoryId, main.sortOrder, main.id, parent ? 1 : 0, i.sortOrder * 10000 + i.id];
+  };
+  return [...items].sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    for (let n = 0; n < ka.length; n++) if (ka[n] !== kb[n]) return ka[n] - kb[n];
+    return 0;
+  });
+}
+
+const childrenOf = (items: CatalogItem[], id: number) => items.filter((i) => i.parentId === id);
+
 function buildLineItems(catalog: Catalog, quantities: Record<number, number>, tier: Tier): LineItem[] {
   const catName = new Map(catalog.categories.map((c) => [c.id, c.name]));
-  const catOrder = new Map(catalog.categories.map((c) => [c.id, c.sortOrder]));
-  return catalog.items
+  return orderItems(catalog.items, catalog.categories)
     .filter((i) => quantities[i.id] != null && quantities[i.id] > 0)
-    .sort((a, b) => (catOrder.get(a.categoryId) ?? 0) - (catOrder.get(b.categoryId) ?? 0) || a.sortOrder - b.sortOrder)
     .map((i) => {
       const qty = quantities[i.id];
       const rate = rateFor(i, tier);
       return {
         itemId: i.id,
+        parentItemId: i.parentId,
         categoryName: catName.get(i.categoryId) ?? "Other",
         name: i.name,
         description: i.description,
@@ -161,6 +184,8 @@ export const estimate = {
   defaultQty,
   rateFor,
   categoryApplies,
+  orderItems,
+  childrenOf,
   buildLineItems,
   groupByCategory,
   total,

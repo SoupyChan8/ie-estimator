@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Minus, Plus, R
 import { Button, Input, Skeleton } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { SignaturePad } from "../components/SignaturePad";
+import { Rise, SplitTitle, useCountUp } from "../components/Motion";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
 import { estimate, type Catalog, type CatalogItem, type LineItem, type Tier } from "../lib/estimate";
@@ -121,20 +122,26 @@ export default function Estimator() {
       <main className={styles.welcome}>
         <picture>
           <source media="(orientation: landscape)" srcSet={brandAssets.welcomeLandscape} />
-          <img src={brandAssets.welcomePortrait} alt="" className={styles.welcomeImage} />
+          <img src={brandAssets.welcomePortrait} alt="" className={`${styles.welcomeImage} ${styles.archReveal}`} />
         </picture>
         <div className={styles.welcomeShade} aria-hidden />
         <div className={styles.welcomeInner}>
           <BrandMark tone="light" size="lg" />
           <div className={styles.welcomeCenter}>
-            <p className={styles.welcomeKicker}>DESIGN &nbsp;|&nbsp; EXECUTE &nbsp;|&nbsp; TRANSFORM</p>
-            <h1 className={styles.welcomeTitle}>A home that feels like you</h1>
+            <Rise delay={0.2}>
+              <p className={styles.welcomeKicker}>DESIGN &nbsp;·&nbsp; TRANSFORM &nbsp;·&nbsp; INSPIRE</p>
+            </Rise>
+            <SplitTitle text="A home that feels like you" className={styles.welcomeTitle} delay={0.35} />
+            <Rise delay={0.9}>
             <p className={styles.welcomeSub}>
               Tell us about your home and the spaces you'd like to transform — we'll show you an instant estimate.
             </p>
+            </Rise>
+            <Rise delay={1.05}>
             <Button variant="gold" size="lg" onClick={() => go("home")} disabled={!catalog}>
               {catalog ? "Begin your estimate" : "Loading rate book…"} <ArrowRight size={18} />
             </Button>
+            </Rise>
             {catalogError && (
               <p className={styles.welcomeError}>
                 {catalogError} <button onClick={() => reloadCatalog()}>Try again</button>
@@ -168,11 +175,8 @@ export default function Estimator() {
         {step !== "done" && (
           <ol className={styles.steps}>
             {FLOW.map((f, i) => (
-              <li
-                key={f.id}
-                className={`${styles.stepDot} ${i === flowIndex ? styles.stepActive : ""} ${i < flowIndex ? styles.stepDone : ""}`}
-              >
-                <span className={styles.stepNum}>{i < flowIndex ? <Check size={11} /> : i + 1}</span>
+              <li key={f.id} className={`${styles.step} ${i === flowIndex ? styles.stepActive : ""} ${i < flowIndex ? styles.stepDone : ""}`}>
+                <b>{String(i + 1).padStart(2, "0")}</b>
                 <span className={styles.stepLabel}>{f.label}</span>
               </li>
             ))}
@@ -188,7 +192,7 @@ export default function Estimator() {
             <Skeleton style={{ height: 160 }} />
           </div>
         ) : (
-          <>
+          <div key={step} className={styles.stepIn}>
             {step === "home" && <HomeStep bhk={bhk} setBhk={setBhk} areaText={areaText} setAreaText={setAreaText} />}
             {step === "scope" && bhk && <ScopeStep catalog={catalog} bhk={bhk} area={area} qty={qty} setQty={setQty} />}
             {step === "quantities" && <QuantitiesStep catalog={catalog} qty={qty} setQty={setQty} />}
@@ -225,7 +229,7 @@ export default function Estimator() {
                 </Button>
               </div>
             )}
-          </>
+          </div>
         )}
       </section>
 
@@ -287,7 +291,7 @@ function HomeStep(props: { bhk: number | null; setBhk: (n: number) => void; area
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>01 · YOUR HOME</p>
-      <h1 className={styles.title}>Tell us about your home</h1>
+      <SplitTitle text="Tell us about your home" className={styles.title} />
       <p className={styles.lede}>We'll suggest sizes for every space based on your home's configuration.</p>
 
       <div className={styles.fieldLabel}>Configuration</div>
@@ -348,40 +352,64 @@ function ScopeStep(props: {
   const groups = useMemo(
     () =>
       catalog.categories
-        .map((c) => ({ category: c, items: catalog.items.filter((i) => i.categoryId === c.id && i.active) }))
-        .filter((g) => g.items.length > 0 && estimate.categoryApplies(g.items, bhk)),
+        .map((c) => {
+          const items = catalog.items.filter((i) => i.categoryId === c.id && i.active);
+          const mains = estimate.orderItems(items.filter((i) => i.parentId == null));
+          return { category: c, items, mains };
+        })
+        .filter((g) => g.mains.length > 0 && estimate.categoryApplies(g.items, bhk)),
     [catalog, bhk],
   );
 
-  const defaultsFor = (items: CatalogItem[]) => items.filter((i) => estimate.baseQty(i, bhk) > 0);
+  const kids = (items: CatalogItem[], main: CatalogItem) => estimate.childrenOf(items, main.id);
+  const fits = (i: CatalogItem) => estimate.baseQty(i, bhk) > 0;
 
-  const toggleItem = (item: CatalogItem) =>
+  /** A main item plus the add-ons that suit this home size. */
+  const withDefaults = (next: Record<number, number>, items: CatalogItem[], main: CatalogItem) => {
+    next[main.id] = estimate.defaultQty(main, bhk, area);
+    for (const k of kids(items, main)) if (fits(k)) next[k.id] = estimate.defaultQty(k, bhk, area);
+  };
+
+  const toggleMain = (items: CatalogItem[], main: CatalogItem) =>
     setQty((q) => {
       const next = { ...q };
-      if (next[item.id] != null) delete next[item.id];
-      else next[item.id] = estimate.defaultQty(item, bhk, area);
+      if (next[main.id] != null) {
+        delete next[main.id];
+        for (const k of kids(items, main)) delete next[k.id];
+      } else withDefaults(next, items, main);
       return next;
     });
 
-  const toggleCategory = (items: CatalogItem[], on: boolean) =>
+  const toggleAddon = (items: CatalogItem[], main: CatalogItem, addon: CatalogItem) =>
+    setQty((q) => {
+      const next = { ...q };
+      if (next[addon.id] != null) delete next[addon.id];
+      else {
+        if (next[main.id] == null) next[main.id] = estimate.defaultQty(main, bhk, area);
+        next[addon.id] = estimate.defaultQty(addon, bhk, area);
+      }
+      return next;
+    });
+
+  const toggleCategory = (items: CatalogItem[], mains: CatalogItem[], on: boolean) =>
     setQty((q) => {
       const next = { ...q };
       for (const i of items) delete next[i.id];
-      if (on) for (const i of defaultsFor(items)) next[i.id] = estimate.defaultQty(i, bhk, area);
+      if (on) for (const m of mains) if (fits(m)) withDefaults(next, items, m);
       return next;
     });
 
   const selectWholeHome = () => {
     const next: Record<number, number> = {};
-    for (const g of groups) for (const i of defaultsFor(g.items)) next[i.id] = estimate.defaultQty(i, bhk, area);
+    for (const g of groups) for (const m of g.mains) if (fits(m)) withDefaults(next, g.items, m);
     setQty(next);
   };
 
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>02 · SCOPE</p>
-      <h1 className={styles.title}>Which spaces shall we design?</h1>
-      <p className={styles.lede}>Tap a space to see what's included. Select whole spaces or pick individual pieces.</p>
+      <SplitTitle text="Which spaces shall we design?" className={styles.title} />
+      <p className={styles.lede}>Tap a space to see what's included. Each piece can come with optional add-ons.</p>
       <div className={styles.scopeActions}>
         <Button variant="outline" onClick={selectWholeHome}>
           Select whole home
@@ -392,9 +420,10 @@ function ScopeStep(props: {
       </div>
 
       <div className={styles.scopeList}>
-        {groups.map(({ category, items }) => {
+        {groups.map(({ category, items, mains }) => {
           const picked = items.filter((i) => qty[i.id] != null).length;
-          const state = picked === 0 ? "none" : picked === items.length ? "all" : "some";
+          const pickedMains = mains.filter((m) => qty[m.id] != null).length;
+          const state = pickedMains === 0 ? "none" : pickedMains === mains.length ? "all" : "some";
           const isOpen = open === category.id;
           return (
             <div key={category.id} className={`${styles.scopeCard} ${picked ? styles.scopeCardOn : ""}`}>
@@ -402,7 +431,7 @@ function ScopeStep(props: {
                 <button
                   type="button"
                   className={`${styles.tick} ${state !== "none" ? styles.tickOn : ""}`}
-                  onClick={() => toggleCategory(items, state === "none")}
+                  onClick={() => toggleCategory(items, mains, state === "none")}
                   aria-label={`Select ${category.name}`}
                 >
                   {state === "all" && <Check size={16} />}
@@ -410,23 +439,43 @@ function ScopeStep(props: {
                 </button>
                 <button type="button" className={styles.scopeTitle} onClick={() => setOpen(isOpen ? null : category.id)}>
                   <span className={styles.scopeName}>{category.name}</span>
-                  <span className={styles.scopeCount}>{picked ? `${picked} of ${items.length} selected` : `${items.length} options`}</span>
+                  <span className={styles.scopeCount}>{picked ? `${picked} selected` : `${mains.length} pieces`}</span>
                   <ChevronDown size={20} className={`${styles.chev} ${isOpen ? styles.chevOpen : ""}`} />
                 </button>
               </div>
               {isOpen && (
                 <ul className={styles.scopeItems}>
-                  {items.map((item) => {
-                    const on = qty[item.id] != null;
+                  {mains.map((main, mi) => {
+                    const on = qty[main.id] != null;
+                    const addons = kids(items, main).filter((k) => k.active);
                     return (
-                      <li key={item.id}>
-                        <button type="button" className={`${styles.scopeItem} ${on ? styles.scopeItemOn : ""}`} onClick={() => toggleItem(item)}>
+                      <li key={main.id} className={`${styles.scopeItemWrap} ${on ? styles.scopeItemOn : ""}`} style={{ animationDelay: `${mi * 0.04}s` }}>
+                        <button type="button" className={styles.scopeItem} onClick={() => toggleMain(items, main)}>
                           <span className={`${styles.tick} ${styles.tickSm} ${on ? styles.tickOn : ""}`}>{on && <Check size={13} />}</span>
                           <span className={styles.scopeItemText}>
-                            <span className={styles.scopeItemName}>{item.name}</span>
-                            {item.description && <span className={styles.scopeItemDesc}>{item.description}</span>}
+                            <span className={styles.scopeItemName}>{main.name}</span>
+                            {main.description && <span className={styles.scopeItemDesc}>{main.description}</span>}
                           </span>
                         </button>
+                        {addons.length > 0 && (
+                          <div className={styles.addons}>
+                            <span className={styles.addonsLabel}>Add-ons</span>
+                            {addons.map((a) => {
+                              const aon = qty[a.id] != null;
+                              return (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  className={`${styles.addon} ${aon ? styles.addonOn : ""}`}
+                                  onClick={() => toggleAddon(items, main, a)}
+                                  aria-pressed={aon}
+                                >
+                                  {aon ? <Check size={13} /> : <Plus size={13} />} {a.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </li>
                     );
                   })}
@@ -447,21 +496,25 @@ function QuantitiesStep(props: {
 }) {
   const { catalog, qty, setQty } = props;
   const groups = catalog.categories
-    .map((c) => ({ category: c, items: catalog.items.filter((i) => i.categoryId === c.id && qty[i.id] != null) }))
+    .map((c) => ({
+      category: c,
+      items: estimate.orderItems(catalog.items.filter((i) => i.categoryId === c.id && qty[i.id] != null)),
+    }))
     .filter((g) => g.items.length > 0);
 
   const setOne = (id: number, v: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.round(v * 100) / 100) }));
-  const remove = (id: number) =>
+  const remove = (item: CatalogItem) =>
     setQty((q) => {
       const n = { ...q };
-      delete n[id];
+      delete n[item.id];
+      if (item.parentId == null) for (const k of estimate.childrenOf(catalog.items, item.id)) delete n[k.id];
       return n;
     });
 
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>03 · SIZES</p>
-      <h1 className={styles.title}>Fine-tune the sizes</h1>
+      <SplitTitle text="Fine-tune the sizes" className={styles.title} />
       <p className={styles.lede}>We've suggested sizes for your home. Adjust anything that doesn't match your space.</p>
       {groups.map(({ category, items }) => (
         <div key={category.id} className={styles.qtyGroup}>
@@ -469,10 +522,14 @@ function QuantitiesStep(props: {
           {items.map((item) => {
             const v = qty[item.id];
             const step = item.unit === "sqft" ? 5 : 1;
+            const child = item.parentId != null;
             return (
-              <div key={item.id} className={styles.qtyRow}>
+              <div key={item.id} className={`${styles.qtyRow} ${child ? styles.qtyChild : ""}`}>
                 <div className={styles.qtyName}>
-                  <span>{item.name}</span>
+                  <span>
+                    {child && <span className={styles.addonMark}>Add-on · </span>}
+                    {item.name}
+                  </span>
                   <span className={styles.qtyDesc}>{item.description}</span>
                 </div>
                 {item.unit === "lumpsum" ? (
@@ -482,18 +539,14 @@ function QuantitiesStep(props: {
                     <button type="button" onClick={() => setOne(item.id, v - step)} aria-label="Decrease">
                       <Minus size={16} />
                     </button>
-                    <input
-                      inputMode="decimal"
-                      value={v}
-                      onChange={(e) => setOne(item.id, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
-                    />
+                    <input inputMode="decimal" value={v} onChange={(e) => setOne(item.id, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)} />
                     <button type="button" onClick={() => setOne(item.id, v + step)} aria-label="Increase">
                       <Plus size={16} />
                     </button>
                     <span className={styles.qtyUnit}>{estimate.UNIT_LABEL[item.unit]}</span>
                   </div>
                 )}
-                <button type="button" className={styles.qtyRemove} onClick={() => remove(item.id)} aria-label="Remove">
+                <button type="button" className={styles.qtyRemove} onClick={() => remove(item)} aria-label="Remove">
                   <X size={16} />
                 </button>
               </div>
@@ -509,7 +562,7 @@ function TierStep({ tier, setTier }: { tier: Tier; setTier: (t: Tier) => void })
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>04 · FINISH</p>
-      <h1 className={styles.title}>Choose your finish</h1>
+      <SplitTitle text="Choose your finish" className={styles.title} />
       <p className={styles.lede}>The same design, crafted in three levels of materials and detailing.</p>
       <div className={styles.tierGrid}>
         {TIER_ORDER.map((t, idx) => {
@@ -519,10 +572,12 @@ function TierStep({ tier, setTier }: { tier: Tier; setTier: (t: Tier) => void })
             <button
               key={t}
               type="button"
-              className={`${styles.tierCard} ${on ? styles.tierOn : ""} ${t === "luxury" ? styles.tierLux : ""}`}
+              className={`${styles.tierCard} ${on ? styles.tierOn : ""}`}
               onClick={() => setTier(t)}
+              aria-pressed={on}
+              style={{ animationDelay: `${0.15 + idx * 0.08}s` }}
             >
-              <span className={styles.tierRank}>{"◆".repeat(idx + 1)}</span>
+              <span className={styles.tierTagPill}>{meta.tag}</span>
               <span className={styles.tierName}>{meta.label}</span>
               <span className={styles.tierTag}>{meta.tagline}</span>
               <ul className={styles.tierList}>
@@ -547,6 +602,7 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
   const lines = estimate.buildLineItems(catalog, qty, tier);
   const groups = estimate.groupByCategory(lines);
   const total = estimate.total(lines);
+  const shown = useCountUp(total);
 
   return (
     <div className={styles.stepWrap}>
@@ -560,7 +616,7 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
       </div>
       <div className={styles.totalBlock}>
         <span className={styles.totalLabel}>ESTIMATED PROJECT VALUE</span>
-        <span className={styles.totalValue}>{estimate.formatINR(total)}</span>
+        <span className={styles.totalValue}>{estimate.formatINR(shown)}</span>
         <span className={styles.totalMeta}>
           {bhk} BHK · {estimate.formatNumber(area)} sq.ft · {estimate.TIERS[tier].label} finish
         </span>
@@ -576,11 +632,11 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
                 <span className={styles.bdSub}>{g.subtotal === 0 ? "Included" : estimate.formatINR(g.subtotal)}</span>
                 <ChevronDown size={18} className={`${styles.chev} ${isOpen ? styles.chevOpen : ""}`} />
               </button>
-              {isOpen && (
+              <div className={`${styles.bdRowsWrap} ${isOpen ? styles.bdRowsOpen : ""}`}>
                 <div className={styles.bdRows}>
                   {g.lines.map((l) => (
-                    <div key={l.itemId} className={styles.bdRow}>
-                      <span className={styles.bdItem}>{l.name}</span>
+                    <div key={l.itemId} className={`${styles.bdRow} ${l.parentItemId != null ? styles.bdChild : ""}`}>
+                      <span className={styles.bdItem}>{l.parentItemId != null ? `+ ${l.name}` : l.name}</span>
                       <span className={styles.bdCalc}>
                         {l.unit === "lumpsum" ? "" : `${estimate.formatNumber(l.qty)} ${estimate.UNIT_LABEL[l.unit]} × ${estimate.formatINR(l.rate)}`}
                       </span>
@@ -588,7 +644,7 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
             </div>
           );
         })}
@@ -606,7 +662,7 @@ function DetailsStep({ details, setDetails }: { details: ClientDetails; setDetai
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>06 · DETAILS</p>
-      <h1 className={styles.title}>Let's make it yours</h1>
+      <SplitTitle text="Let's make it yours" className={styles.title} />
       <p className={styles.lede}>A few details for your agreement.</p>
       <div className={styles.form}>
         <label className={styles.formField}>

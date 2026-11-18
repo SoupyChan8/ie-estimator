@@ -48,7 +48,6 @@ const TERMS = [
   "Delays due to client-side changes, approvals or site conditions may impact the timeline.",
 ];
 
-const SCOPE_PER_PAGE = 7;
 const ROWS_PER_PAGE = 19;
 const ROWS_WITH_TOTALS = 16;
 
@@ -71,7 +70,7 @@ function paginateRows<T>(rows: T[]): T[][] {
   return out;
 }
 
-type Row = { kind: "group"; label: string } | { kind: "line"; n: number; line: LineItem };
+type Row = { kind: "group"; label: string } | { kind: "line"; n: string; child: boolean; line: LineItem };
 
 function PageHead({ num, title }: { num: string; title: string }) {
   return (
@@ -99,16 +98,45 @@ function Img({ src, className }: { src?: string; className?: string }) {
 
 export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function QuotationDocument({ contract, className }, ref) {
   const groups = estimate.groupByCategory(contract.lineItems);
-  const scopePages = chunk(groups, SCOPE_PER_PAGE);
 
   const rows: Row[] = [];
   let n = 0;
   const multiRoom = groups.length > 1;
   for (const g of groups) {
     if (multiRoom) rows.push({ kind: "group", label: g.category });
-    for (const line of g.lines) rows.push({ kind: "line", n: ++n, line });
+    let sub = 0;
+    for (const line of g.lines) {
+      const child = line.parentItemId != null && g.lines.some((l) => l.itemId === line.parentItemId);
+      if (child) rows.push({ kind: "line", n: `${n}.${++sub}`, child, line });
+      else {
+        sub = 0;
+        rows.push({ kind: "line", n: String(++n), child: false, line });
+      }
+    }
   }
+  /** "TV Unit (Puja Unit, Crockery Display)" for the scope page. */
+  const scopeText = (lines: LineItem[]) =>
+    lines
+      .filter((l) => l.parentItemId == null || !lines.some((m) => m.itemId === l.parentItemId))
+      .map((m) => {
+        const kids = lines.filter((l) => l.parentItemId === m.itemId).map((l) => l.name);
+        return kids.length ? `${m.name} (with ${kids.join(", ")})` : m.name;
+      })
+      .join(", ");
   const costPages = paginateRows(rows);
+  // Scope rows grow with their text, so fill each page by estimated height.
+  const scopePages: (typeof groups)[] = [[]];
+  let used = 70; // intro line on the first page
+  for (const g of groups) {
+    const lines = Math.ceil(scopeText(g.lines).length / 40);
+    const h = Math.max(140, lines * 23 + 36) + 16;
+    if (used + h > 900 && scopePages[scopePages.length - 1].length) {
+      scopePages.push([]);
+      used = 0;
+    }
+    scopePages[scopePages.length - 1].push(g);
+    used += h;
+  }
   const dateStr = estimate.formatDate(contract.signedAt || contract.createdAt);
   const tierLabel = estimate.TIERS[contract.tier]?.label ?? contract.tier;
 
@@ -120,16 +148,18 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
         <div className={styles.coverShade} />
         <div className={styles.coverInner}>
           <img src={brandAssets.logoLight} alt="Interior Editors" className={styles.coverLogo} />
-          <div className={styles.coverKicker}>DESIGN &nbsp;|&nbsp; EXECUTE &nbsp;|&nbsp; TRANSFORM</div>
-          <div className={styles.coverTitle}>
-            INTERIOR DESIGN
-            <br />
-            QUOTATION
-          </div>
-          <div className={styles.coverLine}>
-            A HOME
-            <br />
-            THAT FEELS LIKE YOU
+          <div className={styles.coverText}>
+            <div className={styles.coverKicker}>DESIGN &nbsp;·&nbsp; TRANSFORM &nbsp;·&nbsp; INSPIRE</div>
+            <div className={styles.coverTitle}>
+              Interior Design
+              <br />
+              Quotation
+            </div>
+            <div className={styles.coverRule} />
+            <div className={styles.coverLine}>A home that feels like you</div>
+            <div className={styles.coverFor}>
+              Prepared for <strong>{contract.clientName}</strong> · {contract.quotationNo}
+            </div>
           </div>
           <div className={styles.coverWeb}>{brandAssets.contact.website}</div>
         </div>
@@ -187,7 +217,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
               <div key={g.category} className={styles.scopeRow}>
                 <Img src={brandAssets.scope[g.category] || brandAssets.scopeFallback} className={styles.scopeImg} />
                 <div className={styles.scopeCat}>{g.category}</div>
-                <div className={styles.scopeItems}>{g.lines.map((l) => l.name).join(", ")}</div>
+                <div className={styles.scopeItems}>{scopeText(g.lines)}</div>
               </div>
             ))}
           </div>
@@ -219,9 +249,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
                       <td colSpan={6}>{r.label}</td>
                     </tr>
                   ) : (
-                    <tr key={`l-${r.line.itemId}-${i}`}>
+                    <tr key={`l-${r.line.itemId}-${i}`} className={r.child ? styles.childRow : undefined}>
                       <td>{r.n}</td>
-                      <td>{r.line.name}</td>
+                      <td>{r.child ? `+ ${r.line.name}` : r.line.name}</td>
                       <td>{r.line.description}</td>
                       <td>
                         {r.line.unit === "lumpsum" ? "" : estimate.formatNumber(r.line.qty)}
