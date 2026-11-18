@@ -209,4 +209,8 @@ export type VersionInfo = {
   createdBy: string;
   summary: string;
   isDefault: boolean;
+  /** Rate book: this version is the one currently loaded. */
+  isActive?: boolean;
+  /** Rate book, loaded version only: the live rate book has been changed since it was loaded or saved. */
+  edited?: boolean;
 };

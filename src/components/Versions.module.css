@@ -35,3 +35,9 @@
   .editorHead { flex-wrap: wrap; }
   .nameInput { flex-basis: 100%; }
 }
+
+.rbBar { display: flex; align-items: center; gap: var(--spacing-2) var(--spacing-3); flex-wrap: wrap; padding: var(--spacing-3) var(--spacing-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: var(--spacing-4); }
+.rbStatus { display: flex; flex-direction: column; gap: 2px; margin-right: var(--spacing-2); min-width: 150px; }
+.rbLabel { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
+.rbName { font-family: var(--font-family-display); font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+.editedTag { font-family: var(--font-family-base); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-full); background: #f1d9d2; color: var(--oxide); }

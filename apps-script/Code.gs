@@ -517,12 +517,33 @@ function versionRow(v) {
     updatedAt: v.updatedAt instanceof Date ? v.updatedAt.toISOString() : String(v.updatedAt || v.createdAt),
     createdBy: String(v.createdBy || ''), summary: String(v.summary || ''),
     isDefault: v.kind === 'terms' && String(props.getProperty('DEFAULT_TERMS_VERSION') || '') === String(v.id),
+    isActive: v.kind === 'ratebook' && String(props.getProperty('ACTIVE_RATEBOOK_VERSION') || '') === String(v.id),
   };
+}
+
+/** Key-order-independent JSON, used to tell whether the live rate book still matches its loaded version. */
+function canon(x) {
+  if (Array.isArray(x)) return '[' + x.map(canon).join(',') + ']';
+  if (x && typeof x === 'object') return '{' + Object.keys(x).sort().map(k => JSON.stringify(k) + ':' + canon(x[k])).join(',') + '}';
+  return JSON.stringify(x === undefined ? null : x);
+}
+
+function rateBookMatches(data) {
+  if (!data) return false;
+  const live = getCatalog();
+  const norm = (c) => canon({ categories: c.categories || [], items: c.items || [] });
+  return norm(live) === norm(data);
 }
 
 function listVersions(kind) {
   versionsSheet();
-  return readTable(TABS.versions).filter(v => !kind || v.kind === kind).map(versionRow).sort((a, b) => b.id - a.id);
+  const rows = readTable(TABS.versions).filter(v => !kind || v.kind === kind);
+  return rows.map(v => {
+    const out = versionRow(v);
+    // For the rate book version that is currently loaded, report whether it has been edited since.
+    if (out.isActive) out.edited = !rateBookMatches(versionData(v));
+    return out;
+  }).sort((a, b) => b.id - a.id);
 }
 
 function getVersion(id) {
@@ -572,6 +593,13 @@ function saveVersion(p, session) {
       const t = cleanTerms(p.data);
       Object.assign(upd, writeVersionData(t, upd.name), { summary: termsSummary(t) });
     }
+    if (old.kind === 'ratebook' && p.snapshot) {
+      // "Update this version": overwrite it with the live rate book.
+      const c = getCatalog();
+      if (old.dataFileId) { try { DriveApp.getFileById(String(old.dataFileId)).setTrashed(true); } catch (e) { /* gone */ } }
+      Object.assign(upd, writeVersionData(c, upd.name), { summary: rateBookSummary(c) });
+      PropertiesService.getScriptProperties().setProperty('ACTIVE_RATEBOOK_VERSION', String(upd.id));
+    }
     sh.getRange(row, 1, 1, headersOf(TABS.versions).length).setValues([rowFor(TABS.versions, upd)]);
     return versionRow(upd);
   }
@@ -582,6 +610,9 @@ function saveVersion(p, session) {
     summary: kind === 'ratebook' ? rateBookSummary(data) : termsSummary(data) };
   Object.assign(v, writeVersionData(data, name));
   sh.appendRow(rowFor(TABS.versions, v));
+  // A fresh rate book snapshot is identical to the live rate book, so it becomes the loaded version
+  // (backups made automatically before a load don't).
+  if (kind === 'ratebook' && !p.backup) PropertiesService.getScriptProperties().setProperty('ACTIVE_RATEBOOK_VERSION', String(v.id));
   return versionRow(v);
 }
 
@@ -591,6 +622,7 @@ function deleteVersion(id) {
   if (v && v.dataFileId) { try { DriveApp.getFileById(String(v.dataFileId)).setTrashed(true); } catch (e) { /* gone */ } }
   const props = PropertiesService.getScriptProperties();
   if (String(props.getProperty('DEFAULT_TERMS_VERSION') || '') === String(id)) props.deleteProperty('DEFAULT_TERMS_VERSION');
+  if (String(props.getProperty('ACTIVE_RATEBOOK_VERSION') || '') === String(id)) props.deleteProperty('ACTIVE_RATEBOOK_VERSION');
   return deleteRowById(TABS.versions, id);
 }
 
@@ -598,7 +630,13 @@ function deleteVersion(id) {
 function restoreRateBook(id, session) {
   const target = getVersion(id);
   if (target.kind !== 'ratebook' || !target.data) throw new Error('That is not a rate book version.');
-  const backup = saveVersion({ kind: 'ratebook', name: 'Backup before restoring "' + target.name + '"' }, session);
+  // Back up the live rate book first, unless it is an unedited copy of a saved version.
+  const props = PropertiesService.getScriptProperties();
+  const activeId = props.getProperty('ACTIVE_RATEBOOK_VERSION');
+  let activeData = null;
+  if (activeId) { try { activeData = getVersion(Number(activeId)).data; } catch (e) { /* deleted */ } }
+  const backup = rateBookMatches(activeData) ? null
+    : saveVersion({ kind: 'ratebook', backup: true, name: 'Backup before loading "' + target.name + '"' }, session);
   const data = target.data;
   [[TABS.categories, data.categories], [TABS.items, data.items]].forEach(([name, rows]) => {
     const sh = sheetOf(name);
@@ -613,7 +651,8 @@ function restoreRateBook(id, session) {
       if (extra > 0) sh.deleteRows(rows.length + 2, extra);
     }
   });
-  return { ok: true, backupId: backup.id };
+  props.setProperty('ACTIVE_RATEBOOK_VERSION', String(id));
+  return { ok: true, backupId: backup ? backup.id : null };
 }
 
 function setDefaultTerms(id) {

@@ -105,6 +105,119 @@ export function SaveRateBookVersion({ onSaved }: { onSaved?: () => void }) {
   );
 }
 
+/** Top of the Rate book page: which saved version is loaded, switch versions, update or save as new. */
+export function RateBookVersionBar() {
+  const { catalog, reloadCatalog } = useSession();
+  const { list, reload } = useVersions("ratebook");
+  const [busy, setBusy] = useState("");
+  const [saving, setSaving] = useState(false);
+  const active = list?.find((v) => v.isActive) ?? null;
+  const [pick, setPick] = useState("");
+
+  // Re-check "edited" whenever the rate book changes.
+  useEffect(() => {
+    if (catalog) void reload();
+  }, [catalog, reload]);
+  useEffect(() => {
+    setPick(active ? String(active.id) : "");
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const choices = (list ?? []).filter((v) => !v.name.startsWith("Backup before") || v.isActive);
+  const backups = (list ?? []).filter((v) => v.name.startsWith("Backup before") && !v.isActive);
+  const target = list?.find((v) => String(v.id) === pick) ?? null;
+
+  const load = async () => {
+    if (!target || target.isActive) return;
+    const note = active?.edited || !active ? "\n\nThe current rate book has unsaved changes, so it will be kept as a backup version first." : "";
+    if (!window.confirm(`Load "${target.name}" as the rate book?${note}`)) return;
+    setBusy("load");
+    try {
+      const res = await api<{ backupId: number | null }>("restoreRateBook", { id: target.id });
+      await reloadCatalog();
+      await reload();
+      toast.success(`Loaded "${target.name}"`, res.backupId ? "Your previous rates were kept as a backup version." : undefined);
+    } catch (e) {
+      toast.error("Couldn't load that version", (e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const update = async () => {
+    if (!active) return;
+    setBusy("update");
+    try {
+      await api("saveVersion", { id: active.id, snapshot: true });
+      await reload();
+      toast.success(`"${active.name}" updated`);
+    } catch (e) {
+      toast.error("Couldn't update the version", (e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const month = new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+  return (
+    <div className={styles.rbBar}>
+      <div className={styles.rbStatus}>
+        <span className={styles.rbLabel}>Rate book version</span>
+        <span className={styles.rbName}>
+          {list == null ? "…" : active ? active.name : "Not saved as a version"}
+          {active?.edited && <span className={styles.editedTag}>Edited</span>}
+        </span>
+      </div>
+      <select className={`input ${styles.select}`} value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Rate book version">
+        {!active && <option value="">Choose a version…</option>}
+        {choices.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+            {v.isActive ? " (loaded)" : ""}
+          </option>
+        ))}
+        {backups.length > 0 && (
+          <optgroup label="Backups">
+            {backups.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      <Button variant="outline" size="sm" onClick={load} disabled={!target || !!target.isActive || !!busy}>
+        <History size={14} /> {busy === "load" ? "Loading…" : "Load"}
+      </Button>
+      <span className={styles.sep} />
+      {active?.edited && (
+        <Button size="sm" onClick={update} disabled={!!busy}>
+          <Check size={14} /> {busy === "update" ? "Updating…" : `Update "${active.name}"`}
+        </Button>
+      )}
+      <Button variant="ghost" size="sm" onClick={() => setSaving(true)} disabled={!!busy}>
+        <Save size={14} /> Save as new version
+      </Button>
+      <NameDialog
+        open={saving}
+        title="Save as new rate book version"
+        description="Keeps a copy of every category, item, add-on and rate as they are right now."
+        initial={`${month} rates`}
+        onClose={() => setSaving(false)}
+        onSave={async (name) => {
+          try {
+            await api("saveVersion", { kind: "ratebook", name });
+            await reload();
+            toast.success("Rate book version saved", name);
+          } catch (e) {
+            toast.error("Couldn't save the version", (e as Error).message);
+            throw e;
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 /** In a contract's Quotation details: load a saved terms version, or save the current terms as one. */
 export function TermsVersionBar({ value, onApply }: { value: QuotationOptions; onApply: (o: QuotationOptions) => void }) {
   const { list, reload } = useVersions("terms");
@@ -180,14 +293,14 @@ function RateBookVersions() {
   const [busy, setBusy] = useState(0);
 
   const restore = async (v: VersionInfo) => {
-    if (!window.confirm(`Replace the current rate book with "${v.name}"?\n\nThe current rate book is saved as a backup version first, so you can switch back.`)) return;
+    if (!window.confirm(`Load "${v.name}" as the rate book?\n\nIf the current rates have unsaved changes, they are kept as a backup version first.`)) return;
     setBusy(v.id);
     try {
-      await api("restoreRateBook", { id: v.id });
+      const res = await api<{ backupId: number | null }>("restoreRateBook", { id: v.id });
       await Promise.all([reloadCatalog(), reload()]);
-      toast.success(`Restored "${v.name}"`, "The previous rate book was saved as a backup.");
+      toast.success(`Loaded "${v.name}"`, res.backupId ? "Your previous rates were kept as a backup version." : undefined);
     } catch (e) {
-      toast.error("Couldn't restore", (e as Error).message);
+      toast.error("Couldn't load that version", (e as Error).message);
     } finally {
       setBusy(0);
     }
@@ -198,7 +311,7 @@ function RateBookVersions() {
       <header className={styles.head}>
         <div>
           <h2>Rate book versions</h2>
-          <p>Snapshots of every category, item, add-on and rate. Restoring one replaces the live rate book; signed contracts keep the prices they were signed at.</p>
+          <p>Snapshots of every category, item, add-on and rate. Loading one makes it the rate book the estimator uses; signed contracts keep the prices they were signed at.</p>
         </div>
         <SaveRateBookVersion onSaved={reload} />
       </header>
@@ -209,8 +322,8 @@ function RateBookVersions() {
         busy={busy}
         actions={(v) => (
           <>
-            <Button variant="outline" size="sm" onClick={() => restore(v)} disabled={!!busy}>
-              <History size={14} /> {busy === v.id ? "Restoring…" : "Restore"}
+            <Button variant="outline" size="sm" onClick={() => restore(v)} disabled={!!busy || !!v.isActive}>
+              <History size={14} /> {busy === v.id ? "Loading…" : "Load"}
             </Button>
             <RenameDelete v={v} onChanged={reload} />
           </>
@@ -359,10 +472,12 @@ function VersionList(props: {
   return (
     <div className={styles.list}>
       {list.map((v, i) => (
-        <div key={v.id} className={`${styles.row} ${v.isDefault ? styles.rowDefault : ""}`} style={{ animationDelay: `${i * 0.04}s` }}>
+        <div key={v.id} className={`${styles.row} ${v.isDefault || v.isActive ? styles.rowDefault : ""}`} style={{ animationDelay: `${i * 0.04}s` }}>
           <div className={styles.rowMain}>
             <span className={styles.name}>
               {v.name} {v.isDefault && <span className={styles.defaultTag}>Default</span>}
+              {v.isActive && <span className={styles.defaultTag}>Loaded</span>}
+              {v.isActive && v.edited && <span className={styles.editedTag}>Edited</span>}
             </span>
             <span className={styles.meta}>
               {v.summary}

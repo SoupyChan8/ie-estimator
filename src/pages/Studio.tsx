@@ -5,7 +5,7 @@ import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { QuotationDocument } from "../components/QuotationDocument";
 import { QuotationOptionsEditor } from "../components/QuotationOptionsEditor";
-import { SaveRateBookVersion, TermsVersionBar, VersionsTab } from "../components/Versions";
+import { RateBookVersionBar, TermsVersionBar, VersionsTab } from "../components/Versions";
 import { withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
@@ -465,6 +465,8 @@ function RateBookTab() {
   };
 
   return (
+    <>
+    <RateBookVersionBar />
     <div className={styles.rates}>
       <aside className={styles.cats}>
         <div className={styles.catsHead}>Categories</div>
@@ -477,7 +479,6 @@ function RateBookTab() {
         <Button variant="outline" onClick={() => setCatDialog({ name: "" })} className={styles.addCat}>
           <Plus size={16} /> Add category
         </Button>
-        <SaveRateBookVersion />
       </aside>
 
       <section className={styles.itemsPane}>
@@ -621,6 +622,7 @@ function RateBookTab() {
         />
       </Modal>
     </div>
+    </>
   );
 }
 
