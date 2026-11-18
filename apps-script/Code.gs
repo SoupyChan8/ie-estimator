@@ -22,7 +22,7 @@ const COLS = {
   Users: ['email', 'name', 'passwordHash', 'salt', 'active'],
   // Saved versions. kind: "ratebook" (a snapshot of Categories + Items) or "terms" (included / not included,
   // payment schedule, project timeline). Large snapshots are kept as JSON files in Drive (dataFileId).
-  Versions: ['id', 'kind', 'name', 'createdAt', 'createdBy', 'updatedAt', 'summary', 'dataJson', 'dataFileId'],
+  Versions: ['id', 'kind', 'name', 'createdAt', 'createdBy', 'updatedAt', 'summary', 'dataJson', 'dataFileId', 'hash'],
 };
 const SESSION_DAYS = 30;
 const STUDIO_MINUTES = 30;
@@ -33,6 +33,17 @@ const TIERS = ['standard', 'premium', 'luxury'];
 
 function doGet() {
   return json({ ok: true, service: 'Interior Editors Estimator API' });
+}
+
+/** Runs a rate book change under the lock, then returns its result plus the fresh rate book and versions. */
+function withState(fn) {
+  return withLock(() => {
+    const res = fn();
+    clearCatalogCache();
+    const out = res && typeof res === 'object' && !Array.isArray(res) ? Object.assign({}, res) : { result: res };
+    out.state = rateBookState();
+    return out;
+  });
 }
 
 function doPost(e) {
@@ -62,17 +73,18 @@ function doPost(e) {
       case 'listContracts': return json(listContracts());
       case 'getContract': return json(getContract(Number(p.id)));
       case 'deleteContract': return json(withLock(() => deleteContract(Number(p.id))));
-      case 'saveCategory': return json(withLock(() => saveCategory(p)));
-      case 'deleteCategory': return json(withLock(() => deleteCategory(Number(p.id))));
-      case 'saveItem': return json(withLock(() => saveItem(p)));
-      case 'deleteItem': return json(withLock(() => deleteItem(Number(p.id))));
+      case 'rateBookState': return json(rateBookState());
+      case 'saveCategory': return json(withState(() => saveCategory(p)));
+      case 'deleteCategory': return json(withState(() => deleteCategory(Number(p.id))));
+      case 'saveItem': return json(withState(() => saveItem(p)));
+      case 'deleteItem': return json(withState(() => deleteItem(Number(p.id))));
       case 'savePdf': return json(withLock(() => savePdf(p)));
       case 'saveContractOptions': return json(withLock(() => saveContractOptions(p)));
       case 'listVersions': return json(listVersions(p.kind));
       case 'getVersion': return json(getVersion(Number(p.id)));
-      case 'saveVersion': return json(withLock(() => saveVersion(p, session)));
-      case 'deleteVersion': return json(withLock(() => deleteVersion(Number(p.id))));
-      case 'restoreRateBook': return json(withLock(() => restoreRateBook(Number(p.id), session)));
+      case 'saveVersion': return json(withState(() => saveVersion(p, session)));
+      case 'deleteVersion': return json(withState(() => deleteVersion(Number(p.id))));
+      case 'restoreRateBook': return json(withState(() => restoreRateBook(Number(p.id), session)));
       case 'setDefaultTerms': return json(setDefaultTerms(p.id === null || p.id === undefined ? null : Number(p.id)));
       case 'changePassword': return json(changePassword(session, p.currentPassword, p.newPassword));
     }
@@ -256,21 +268,39 @@ const bool = v => v === true || String(v).toUpperCase() === 'TRUE';
 
 /* ───────────────────────── Rate book ───────────────────────── */
 
+const normCategory = c => ({ id: Number(c.id), name: String(c.name), sortOrder: num(c.sortOrder) });
+const normItem = i => ({
+  id: Number(i.id), categoryId: Number(i.categoryId), parentId: numOrNull(i.parentId),
+  name: String(i.name), description: String(i.description || ''),
+  unit: UNITS.indexOf(i.unit) >= 0 ? i.unit : 'sqft',
+  rateStandard: num(i.rateStandard), ratePremium: numOrNull(i.ratePremium), rateLuxury: numOrNull(i.rateLuxury),
+  qtyBhk1: num(i.qtyBhk1), qtyBhk2: num(i.qtyBhk2), qtyBhk3: num(i.qtyBhk3), qtyBhk4: num(i.qtyBhk4),
+  scalesWithArea: bool(i.scalesWithArea), active: i.active === '' || i.active === undefined ? true : bool(i.active),
+  sortOrder: num(i.sortOrder),
+});
+
+/** The live rate book. Cached for 10 minutes; any rate book change (in the app or the Sheet) clears it. */
 function getCatalog() {
-  const categories = readTable(TABS.categories)
-    .map(c => ({ id: Number(c.id), name: String(c.name), sortOrder: num(c.sortOrder) }))
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('catalog');
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* rebuild */ } }
+  const categories = readTable(TABS.categories).map(normCategory)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-  const items = readTable(TABS.items)
-    .map(i => ({
-      id: Number(i.id), categoryId: Number(i.categoryId), parentId: numOrNull(i.parentId),
-      name: String(i.name), description: String(i.description || ''),
-      unit: UNITS.indexOf(i.unit) >= 0 ? i.unit : 'sqft',
-      rateStandard: num(i.rateStandard), ratePremium: numOrNull(i.ratePremium), rateLuxury: numOrNull(i.rateLuxury),
-      qtyBhk1: num(i.qtyBhk1), qtyBhk2: num(i.qtyBhk2), qtyBhk3: num(i.qtyBhk3), qtyBhk4: num(i.qtyBhk4),
-      scalesWithArea: bool(i.scalesWithArea), active: i.active === '' ? true : bool(i.active), sortOrder: num(i.sortOrder),
-    }))
+  const items = readTable(TABS.items).map(normItem)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-  return { categories: categories, items: items };
+  const out = { categories: categories, items: items };
+  const str = JSON.stringify(out);
+  if (str.length < 95000) { try { cache.put('catalog', str, 600); } catch (e) { /* too big */ } }
+  return out;
+}
+
+function clearCatalogCache() {
+  CacheService.getScriptCache().remove('catalog');
+}
+
+/** Simple trigger: an edit made directly in the Sheet shows up in the app straight away. */
+function onEdit() {
+  clearCatalogCache();
 }
 
 function saveCategory(p) {
@@ -500,6 +530,8 @@ function versionsSheet() {
     sh.appendRow(COLS.Versions);
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, COLS.Versions.length).setFontWeight('bold').setBackground('#dcd3c2');
+  } else if (sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].indexOf('hash') < 0) {
+    sh.getRange(1, sh.getLastColumn() + 1).setValue('hash').setFontWeight('bold');
   }
   return sh;
 }
@@ -557,23 +589,44 @@ function listVersions(kind) {
 function liveRateBookMatch() {
   const props = PropertiesService.getScriptProperties();
   const activeId = Number(props.getProperty('ACTIVE_RATEBOOK_VERSION') || 0) || null;
-  const live = canonRateBook(getCatalog());
+  const live = rateBookHash(getCatalog());
+  const rank = (v) => (Number(v.id) === activeId ? 0 : /^(Backup before|Custom rates before)/.test(String(v.name)) ? 2 : 1);
   const books = readTable(TABS.versions).filter(v => v.kind === 'ratebook')
-    .sort((a, b) => {
-      // prefer the active one, then named versions over backups, then newest
-      const rank = (v) => (Number(v.id) === activeId ? 0 : /^(Backup before|Custom rates before)/.test(String(v.name)) ? 2 : 1);
-      return rank(a) - rank(b) || Number(b.id) - Number(a.id);
-    });
+    .sort((a, b) => rank(a) - rank(b) || Number(b.id) - Number(a.id));
   let matchId = null;
-  for (let i = 0; i < books.length && !matchId; i++) {
-    try { if (canonRateBook(versionData(books[i])) === live) matchId = Number(books[i].id); } catch (e) { /* unreadable */ }
-  }
+  books.forEach(v => {
+    let h = String(v.hash || '');
+    if (!h) {
+      // versions saved before fingerprints existed: work it out once and store it
+      try { h = rateBookHash(versionData(v)); } catch (e) { return; }
+      const row = findRowIndex(TABS.versions, Number(v.id));
+      if (row > 0) sheetOf(TABS.versions).getRange(row, ensureColumn(TABS.versions, 'hash')).setValue(h);
+    }
+    if (!matchId && h === live) matchId = Number(v.id);
+  });
   if (matchId && matchId !== activeId) props.setProperty('ACTIVE_RATEBOOK_VERSION', String(matchId));
   return { matchId: matchId, baseId: matchId || activeId };
 }
 
+/** Everything the Rate book screen needs after a change, so the app needs one round trip instead of three. */
+function rateBookState() {
+  return { catalog: getCatalog(), versions: listVersions('ratebook') };
+}
+
+/** Compares rate books by content: same fields normalised the same way, in id order, so row order doesn't matter. */
 function canonRateBook(c) {
-  return c ? canon({ categories: c.categories || [], items: c.items || [] }) : '';
+  if (!c) return '';
+  const byId = (a, b) => a.id - b.id;
+  return canon({
+    categories: (c.categories || []).map(normCategory).sort(byId),
+    items: (c.items || []).map(normItem).sort(byId),
+  });
+}
+
+/** Short fingerprint of a rate book, stored with each version so matching never has to open them all. */
+function rateBookHash(c) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, canonRateBook(c), Utilities.Charset.UTF_8)
+    .map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
 }
 
 function getVersion(id) {
@@ -618,7 +671,7 @@ function saveVersion(p, session) {
     if (row < 0) throw new Error('Version not found.');
     const old = readTable(TABS.versions).find(r => Number(r.id) === Number(p.id));
     const upd = { id: Number(p.id), kind: old.kind, name: name || old.name, createdAt: old.createdAt, createdBy: old.createdBy,
-      updatedAt: now, summary: old.summary, dataJson: old.dataJson, dataFileId: old.dataFileId };
+      updatedAt: now, summary: old.summary, dataJson: old.dataJson, dataFileId: old.dataFileId, hash: old.hash || '' };
     if (old.kind === 'terms' && p.data) {
       const t = cleanTerms(p.data);
       Object.assign(upd, writeVersionData(t, upd.name), { summary: termsSummary(t) });
@@ -627,7 +680,7 @@ function saveVersion(p, session) {
       // "Update this version": overwrite it with the live rate book.
       const c = getCatalog();
       if (old.dataFileId) { try { DriveApp.getFileById(String(old.dataFileId)).setTrashed(true); } catch (e) { /* gone */ } }
-      Object.assign(upd, writeVersionData(c, upd.name), { summary: rateBookSummary(c) });
+      Object.assign(upd, writeVersionData(c, upd.name), { summary: rateBookSummary(c), hash: rateBookHash(c) });
       PropertiesService.getScriptProperties().setProperty('ACTIVE_RATEBOOK_VERSION', String(upd.id));
     }
     sh.getRange(row, 1, 1, headersOf(TABS.versions).length).setValues([rowFor(TABS.versions, upd)]);
@@ -637,7 +690,7 @@ function saveVersion(p, session) {
   if (!name) throw new Error('Give the version a name.');
   const data = kind === 'ratebook' ? getCatalog() : cleanTerms(p.data);
   const v = { id: nextId(TABS.versions), kind: kind, name: name, createdAt: now, createdBy: session.email, updatedAt: now,
-    summary: kind === 'ratebook' ? rateBookSummary(data) : termsSummary(data) };
+    summary: kind === 'ratebook' ? rateBookSummary(data) : termsSummary(data), hash: kind === 'ratebook' ? rateBookHash(data) : '' };
   Object.assign(v, writeVersionData(data, name));
   sh.appendRow(rowFor(TABS.versions, v));
   // A fresh rate book snapshot is identical to the live rate book, so it becomes the loaded version
@@ -678,6 +731,7 @@ function restoreRateBook(id, session) {
       if (extra > 0) sh.deleteRows(rows.length + 2, extra);
     }
   });
+  clearCatalogCache();
   props.setProperty('ACTIVE_RATEBOOK_VERSION', String(id));
   return { ok: true, backupId: backup ? backup.id : null };
 }
@@ -938,7 +992,8 @@ function addSampleVersions() {
   const added = [];
   const put = (kind, name, data, summary) => {
     if (have.indexOf(kind + '|' + name) >= 0) return;
-    const v = { id: nextId(TABS.versions), kind: kind, name: name, createdAt: now, createdBy: 'Sample', updatedAt: now, summary: summary };
+    const v = { id: nextId(TABS.versions), kind: kind, name: name, createdAt: now, createdBy: 'Sample', updatedAt: now, summary: summary,
+      hash: kind === 'ratebook' ? rateBookHash(data) : '' };
     Object.assign(v, writeVersionData(data, name));
     sh.appendRow(rowFor(TABS.versions, v));
     added.push(name);
@@ -1045,6 +1100,7 @@ function signOutAll() {
 }
 
 function seedRateBook(book) {
+  clearCatalogCache();
   const c = seedCatalog();
   c.categories.forEach(cat => book.getSheetByName('Categories').appendRow(rowFor(TABS.categories, cat)));
   const rows = c.items.map(it => rowFor(TABS.items, Object.assign({}, it, { parentId: it.parentId === null ? '' : it.parentId })));

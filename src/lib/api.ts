@@ -34,6 +34,16 @@ export const tokenStore = {
   },
 };
 
+/** Fresh rate book + rate book versions, sent back by every rate book change. */
+export type RateBookState = { catalog: import("./estimate").Catalog; versions: import("./estimate").VersionInfo[] };
+const stateListeners = new Set<(s: RateBookState) => void>();
+export function onRateBookState(fn: (s: RateBookState) => void) {
+  stateListeners.add(fn);
+  return () => {
+    stateListeners.delete(fn);
+  };
+}
+
 type Listener = (code: string) => void;
 const listeners = new Set<Listener>();
 /** Lets the auth layer react when the server says the session or studio unlock has expired. */
@@ -67,5 +77,7 @@ export async function api<T>(action: string, payload?: unknown): Promise<T> {
     if (d.code) listeners.forEach((l) => l(d.code as string));
     throw new ApiError(d.error, d.code);
   }
+  const st = (data as { state?: RateBookState }).state;
+  if (st && st.catalog) stateListeners.forEach((l) => l(st));
   return data as T;
 }

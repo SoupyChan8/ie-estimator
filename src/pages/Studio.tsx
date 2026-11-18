@@ -410,7 +410,7 @@ const blankDraft = (categoryId: number, parentId: number | null = null): ItemDra
 const num = (s: string) => Number(s.replace(/[^0-9.]/g, "")) || 0;
 
 function RateBookTab() {
-  const { catalog, reloadCatalog } = useSession();
+  const { catalog } = useSession();
   const [catId, setCatId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [catDialog, setCatDialog] = useState<{ id?: number; name: string } | null>(null);
@@ -425,8 +425,7 @@ function RateBookTab() {
     async (fn: () => Promise<unknown>, ok: string, fail: string) => {
       setBusy(true);
       try {
-        await fn();
-        await reloadCatalog();
+        await fn(); // the reply carries the fresh rate book
         toast.success(ok);
         return true;
       } catch (e) {
@@ -436,7 +435,7 @@ function RateBookTab() {
         setBusy(false);
       }
     },
-    [reloadCatalog],
+    [],
   );
 
   if (!catalog) return <Skeleton style={{ height: 400 }} />;

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, onAuthError, tokenStore } from "./api";
+import { api, onAuthError, onRateBookState, tokenStore } from "./api";
 import type { Catalog } from "./estimate";
 
 type User = { email: string; name: string };
@@ -20,10 +20,33 @@ type SessionValue = {
 
 const Ctx = createContext<SessionValue | null>(null);
 
+const CATALOG_KEY = "ie-catalog";
+const readCachedCatalog = (): Catalog | null => {
+  try {
+    const raw = localStorage.getItem(CATALOG_KEY);
+    return raw ? (JSON.parse(raw) as Catalog) : null;
+  } catch {
+    return null;
+  }
+};
+const writeCachedCatalog = (c: Catalog | null) => {
+  try {
+    if (c) localStorage.setItem(CATALOG_KEY, JSON.stringify(c));
+    else localStorage.removeItem(CATALOG_KEY);
+  } catch {
+    /* storage full or blocked */
+  }
+};
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>(tokenStore.get() ? "loading" : "signedOut");
   const [user, setUser] = useState<User | null>(null);
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  // Start with the last rate book this device saw, so the app opens instantly; a fresh copy replaces it.
+  const [catalog, setCatalogState] = useState<Catalog | null>(() => (tokenStore.get() ? readCachedCatalog() : null));
+  const setCatalog = useCallback((c: Catalog | null) => {
+    setCatalogState(c);
+    writeCachedCatalog(c);
+  }, []);
   const [catalogError, setCatalogError] = useState("");
   const [studioUntil, setStudioUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -34,7 +57,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setCatalog(null);
     setStudioUntil(0);
     setStatus("signedOut");
-  }, []);
+  }, [setCatalog]);
+
+  useEffect(() => onRateBookState((s) => setCatalog(s.catalog)), [setCatalog]);
 
   const reloadCatalog = useCallback(async () => {
     setCatalogError("");
@@ -43,7 +68,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setCatalogError((e as Error).message);
     }
-  }, []);
+  }, [setCatalog]);
 
   useEffect(() => {
     const off = onAuthError((code) => {

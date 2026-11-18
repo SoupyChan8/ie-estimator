@@ -3,8 +3,7 @@ import { createPortal } from "react-dom";
 import { BookCopy, Check, History, Pencil, Plus, Save, Star, Trash2 } from "lucide-react";
 import { Button, Input, Modal, Skeleton } from "./ui";
 import { QuotationOptionsEditor } from "./QuotationOptionsEditor";
-import { api } from "../lib/api";
-import { useSession } from "../lib/session";
+import { api, onRateBookState } from "../lib/api";
 import { estimate, type VersionInfo, type VersionKind } from "../lib/estimate";
 import { DEFAULT_OPTIONS, withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { toast } from "../lib/toast";
@@ -26,6 +25,8 @@ function useVersions(kind: VersionKind) {
   useEffect(() => {
     void reload();
   }, [reload]);
+  // Rate book changes send back the fresh version list, so there's nothing to re-fetch.
+  useEffect(() => (kind === "ratebook" ? onRateBookState((s) => setList(s.versions)) : undefined), [kind]);
   return { list, error, reload };
 }
 
@@ -112,8 +113,7 @@ const isBackup = (v: VersionInfo) => /^(Backup before|Custom rates before)/.test
  * has been edited away from every saved version; the estimator always uses the live rates, saved or not.
  */
 export function RateBookVersionBar() {
-  const { catalog, reloadCatalog } = useSession();
-  const { list, reload } = useVersions("ratebook");
+  const { list } = useVersions("ratebook");
   const [busy, setBusy] = useState("");
   const [saving, setSaving] = useState(false);
   const active = list?.find((v) => v.isActive) ?? null;
@@ -122,10 +122,6 @@ export function RateBookVersionBar() {
   const current = active ? String(active.id) : "custom";
   const [pick, setPick] = useState("custom");
 
-  // Re-check the match whenever the rate book changes.
-  useEffect(() => {
-    if (catalog) void reload();
-  }, [catalog, reload]);
   useEffect(() => {
     setPick(current);
   }, [current]);
@@ -141,8 +137,6 @@ export function RateBookVersionBar() {
     setBusy("use");
     try {
       const res = await api<{ backupId: number | null }>("restoreRateBook", { id: target.id });
-      await reloadCatalog();
-      await reload();
       toast.success(`Now using "${target.name}"`, res.backupId ? "Your custom rates were kept as a backup version." : undefined);
     } catch (e) {
       toast.error("Couldn't switch versions", (e as Error).message);
@@ -157,7 +151,6 @@ export function RateBookVersionBar() {
     setBusy("update");
     try {
       await api("saveVersion", { id: base.id, snapshot: true });
-      await reload();
       toast.success(`"${base.name}" updated`);
     } catch (e) {
       toast.error("Couldn't update the version", (e as Error).message);
@@ -222,7 +215,6 @@ export function RateBookVersionBar() {
         onSave={async (name) => {
           try {
             await api("saveVersion", { kind: "ratebook", name });
-            await reload();
             toast.success("Rate book version saved", name);
           } catch (e) {
             toast.error("Couldn't save the version", (e as Error).message);
@@ -304,8 +296,7 @@ export function VersionsTab() {
 }
 
 function RateBookVersions() {
-  const { reloadCatalog } = useSession();
-  const { list, error, reload } = useVersions("ratebook");
+  const { list, error } = useVersions("ratebook");
   const [busy, setBusy] = useState(0);
 
   const restore = async (v: VersionInfo) => {
@@ -313,7 +304,6 @@ function RateBookVersions() {
     setBusy(v.id);
     try {
       const res = await api<{ backupId: number | null }>("restoreRateBook", { id: v.id });
-      await Promise.all([reloadCatalog(), reload()]);
       toast.success(`Now using "${v.name}"`, res.backupId ? "Your custom rates were kept as a backup version." : undefined);
     } catch (e) {
       toast.error("Couldn't load that version", (e as Error).message);
@@ -329,7 +319,7 @@ function RateBookVersions() {
           <h2>Rate book versions</h2>
           <p>Snapshots of every category, item, add-on and rate. Loading one makes it the rate book the estimator uses; signed contracts keep the prices they were signed at.</p>
         </div>
-        <SaveRateBookVersion onSaved={reload} />
+        <SaveRateBookVersion />
       </header>
       {list && !list.some((v) => v.isActive) && (
         <div className={`${styles.row} ${styles.rowDefault}`}>
@@ -356,7 +346,7 @@ function RateBookVersions() {
                 <History size={14} /> {busy === v.id ? "Switching…" : "Use this version"}
               </Button>
             )}
-            <RenameDelete v={v} onChanged={reload} />
+            <RenameDelete v={v} onChanged={() => undefined} />
           </>
         )}
       />
