@@ -1184,7 +1184,9 @@ function seedCatalog(raw) {
   const W = 'Sliding / hinged wardrobe up to the ceiling';
   const H = 'Upholstered / fluted headboard wall';
   const S = 'Wall-mounted desk with shelves';
-  const L = (cat) => ({ under: 'Wardrobe', item: [cat, 'Wardrobe Loft', 'Loft storage above the wardrobe', 'sqft', 900, 1200, 1700, 0, 12, 14, 14, false] });
+  // loft quantities follow the wardrobe it sits on (Bedroom 2 from 2 BHK, Bedroom 3 from 3 BHK)
+  const LQ = { 4: [0, 12, 14, 14], 5: [0, 12, 14, 14], 6: [0, 0, 14, 14] };
+  const L = (cat) => ({ under: 'Wardrobe', item: [cat, 'Wardrobe Loft', 'Loft storage above the wardrobe', 'sqft', 900, 1200, 1700].concat(LQ[cat], [false]) });
   const seed = [
     [1, 'TV Unit', 'Feature TV wall with back-lit panelling', 'sqft', 950, 1300, 1800, 45, 55, 60, 70, false],
     { under: 'TV Unit', item: [1, 'Puja Unit', 'Puja niche with back-lit jali and drawers', 'sqft', 1200, 1650, 2300, 12, 14, 15, 18, false] },

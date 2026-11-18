@@ -112,8 +112,9 @@ function rateFor(item: CatalogItem, tier: Tier): number {
   return item.rateStandard;
 }
 
+/** A room shows for a home size when one of its main items does; add-ons alone don't count. */
 function categoryApplies(items: CatalogItem[], bhk: number): boolean {
-  return items.some((i) => i.active && baseQty(i, bhk) > 0);
+  return items.some((i) => i.active && i.parentId == null && baseQty(i, bhk) > 0);
 }
 
 /** Items in display order: each main item followed by its nested add-ons. */
