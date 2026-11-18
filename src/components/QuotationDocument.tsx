@@ -63,7 +63,9 @@ function Img({ src, className }: { src?: string; className?: string }) {
 }
 
 export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function QuotationDocument({ contract, options, className }, ref) {
-  const { included: INCLUDED, notIncluded: NOT_INCLUDED, payments: PAYMENTS, timeline: TIMELINE } = options ?? withDefaults(contract.pdfOptions);
+  const opts = options ?? withDefaults(contract.pdfOptions ?? contract.defaultOptions);
+  const { included: INCLUDED, notIncluded: NOT_INCLUDED, payments: PAYMENTS, timeline: TIMELINE } = opts;
+  const signed = opts.showSignatures !== false;
   const dense = INCLUDED.length + NOT_INCLUDED.length > 13;
   const groups = estimate.groupByCategory(contract.lineItems);
 
@@ -342,12 +344,12 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
             <small>Client Name</small>
           </div>
           <div className={styles.signCol}>
-            {contract.clientSignature && <img src={contract.clientSignature} alt="Client signature" className={styles.signImg} />}
+            {signed && contract.clientSignature && <img src={contract.clientSignature} alt="Client signature" className={styles.signImg} />}
             <div className={styles.signLine} />
             <small>Signature</small>
           </div>
           <div className={styles.signCol}>
-            <div className={styles.signValue}>{dateStr}</div>
+            <div className={styles.signValue}>{signed ? dateStr : ""}</div>
             <div className={styles.signLine} />
             <small>Date</small>
           </div>
@@ -359,7 +361,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
             <small>For Interior Editors</small>
           </div>
           <div className={styles.signCol}>
-            {contract.designerSignature && (
+            {signed && contract.designerSignature && (
               <img src={contract.designerSignature} alt="Designer signature" className={styles.signImg} />
             )}
             <div className={styles.signLine} />

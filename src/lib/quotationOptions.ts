@@ -6,6 +6,8 @@ export type QuotationOptions = {
   notIncluded: string[];
   payments: PaymentStage[];
   timeline: TimelinePhase[];
+  /** Put the signatures captured on the iPad into the PDF. Per contract; not part of terms versions. */
+  showSignatures?: boolean;
 };
 
 /** Defaults taken from the Interior Editors quotation PDF. */
@@ -49,5 +51,6 @@ export function withDefaults(o: Partial<QuotationOptions> | null | undefined): Q
     notIncluded: o?.notIncluded ?? DEFAULT_OPTIONS.notIncluded,
     payments: o?.payments ?? DEFAULT_OPTIONS.payments,
     timeline: o?.timeline ?? DEFAULT_OPTIONS.timeline,
+    showSignatures: o?.showSignatures ?? true,
   };
 }

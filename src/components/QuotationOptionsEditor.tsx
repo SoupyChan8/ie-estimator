@@ -4,7 +4,7 @@ import { estimate } from "../lib/estimate";
 import { DEFAULT_OPTIONS, type QuotationOptions } from "../lib/quotationOptions";
 import styles from "./QuotationOptionsEditor.module.css";
 
-type Props = { value: QuotationOptions; onChange: (v: QuotationOptions) => void; total: number };
+type Props = { value: QuotationOptions; onChange: (v: QuotationOptions) => void; /** Contract total; omit to hide the rupee amounts. */ total?: number };
 
 /** Studio editor for the PDF's included / not-included points, payment schedule and project timeline. */
 export function QuotationOptionsEditor({ value, onChange, total }: Props) {
@@ -75,7 +75,7 @@ export function QuotationOptionsEditor({ value, onChange, total }: Props) {
                   set("payments", next);
                 }}
               />
-              <span className={styles.amt}>{estimate.formatINR((total * (Number(p.pct) || 0)) / 100)}</span>
+              <span className={styles.amt}>{total != null ? estimate.formatINR((total * (Number(p.pct) || 0)) / 100) : ""}</span>
               <button className={styles.del} onClick={() => set("payments", value.payments.filter((_, k) => k !== i))} aria-label="Delete stage">
                 <Trash2 size={16} />
               </button>

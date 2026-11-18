@@ -54,6 +54,8 @@ export type ContractSummary = {
 export type ContractFull = ContractSummary & {
   /** Studio edits for the PDF; null means the defaults. */
   pdfOptions?: import("./quotationOptions").QuotationOptions | null;
+  /** The studio's default terms version, used when this contract has no edits of its own. */
+  defaultOptions?: import("./quotationOptions").QuotationOptions | null;
   clientPhone: string;
   clientEmail: string;
   designerName: string;
@@ -194,4 +196,17 @@ export const estimate = {
   formatINR,
   formatNumber,
   formatDate,
+};
+
+export type VersionKind = "ratebook" | "terms";
+
+export type VersionInfo = {
+  id: number;
+  kind: VersionKind;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  summary: string;
+  isDefault: boolean;
 };

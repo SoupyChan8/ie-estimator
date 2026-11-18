@@ -85,3 +85,8 @@
   .cats { position: static; flex-direction: row; flex-wrap: wrap; }
   .catsHead { width: 100%; }
 }
+
+.signToggle { display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-3) var(--spacing-4); margin-bottom: var(--spacing-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; }
+.signToggle span { display: flex; flex-direction: column; gap: 2px; }
+.signToggle strong { font-weight: 600; font-size: 0.95rem; }
+.signToggle small { color: var(--muted-foreground); font-size: 0.82rem; }

@@ -9,7 +9,7 @@
  * Then Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
  */
 
-const TABS = { categories: 'Categories', items: 'Items', contracts: 'Contracts', users: 'Users' };
+const TABS = { categories: 'Categories', items: 'Items', contracts: 'Contracts', users: 'Users', versions: 'Versions' };
 const COLS = {
   Categories: ['id', 'name', 'sortOrder'],
   // parentId: blank for a main item; the id of another item in the same category for a nested add-on
@@ -20,6 +20,9 @@ const COLS = {
     'projectScope', 'bhk', 'carpetArea', 'tier', 'total', 'designerName', 'createdBy', 'lineItemsJson',
     'clientSigFileId', 'designerSigFileId', 'pdfFileId', 'pdfUrl', 'pdfOptionsJson'],
   Users: ['email', 'name', 'passwordHash', 'salt', 'active'],
+  // Saved versions. kind: "ratebook" (a snapshot of Categories + Items) or "terms" (included / not included,
+  // payment schedule, project timeline). Large snapshots are kept as JSON files in Drive (dataFileId).
+  Versions: ['id', 'kind', 'name', 'createdAt', 'createdBy', 'updatedAt', 'summary', 'dataJson', 'dataFileId'],
 };
 const SESSION_DAYS = 30;
 const STUDIO_MINUTES = 30;
@@ -65,6 +68,12 @@ function doPost(e) {
       case 'deleteItem': return json(withLock(() => deleteItem(Number(p.id))));
       case 'savePdf': return json(withLock(() => savePdf(p)));
       case 'saveContractOptions': return json(withLock(() => saveContractOptions(p)));
+      case 'listVersions': return json(listVersions(p.kind));
+      case 'getVersion': return json(getVersion(Number(p.id)));
+      case 'saveVersion': return json(withLock(() => saveVersion(p, session)));
+      case 'deleteVersion': return json(withLock(() => deleteVersion(Number(p.id))));
+      case 'restoreRateBook': return json(withLock(() => restoreRateBook(Number(p.id), session)));
+      case 'setDefaultTerms': return json(setDefaultTerms(p.id === null || p.id === undefined ? null : Number(p.id)));
       case 'changePassword': return json(changePassword(session, p.currentPassword, p.newPassword));
     }
     return json({ error: 'Unknown action: ' + action });
@@ -450,6 +459,7 @@ function getContract(id) {
   out.signedAt = out.createdAt;
   out.pdfOptions = null;
   if (c.pdfOptionsJson) { try { out.pdfOptions = JSON.parse(c.pdfOptionsJson); } catch (e) { /* ignore bad JSON */ } }
+  out.defaultOptions = defaultTermsData();
   return out;
 }
 
@@ -458,10 +468,17 @@ function saveContractOptions(p) {
   const id = Number(p.id);
   const row = findRowIndex(TABS.contracts, id);
   if (row < 0) throw new Error('Contract not found.');
-  const o = p.options || {};
+  const clean = cleanTerms(p.options);
+  clean.showSignatures = !(p.options && p.options.showSignatures === false);
+  sheetOf(TABS.contracts).getRange(row, ensureColumn(TABS.contracts, 'pdfOptionsJson')).setValue(JSON.stringify(clean));
+  return { options: clean };
+}
+
+function cleanTerms(o) {
+  o = o || {};
   const text = (v, n) => String(v === undefined || v === null ? '' : v).trim().slice(0, n);
   const list = (arr) => (Array.isArray(arr) ? arr : []).map(x => text(x, 300)).filter(Boolean).slice(0, 20);
-  const clean = {
+  return {
     included: list(o.included),
     notIncluded: list(o.notIncluded),
     payments: (Array.isArray(o.payments) ? o.payments : []).slice(0, 10).map(x => ({
@@ -470,8 +487,151 @@ function saveContractOptions(p) {
     timeline: (Array.isArray(o.timeline) ? o.timeline : []).slice(0, 8).map(x => ({ title: text(x.title, 60), sub: text(x.sub, 40) }))
       .filter(x => x.title),
   };
-  sheetOf(TABS.contracts).getRange(row, ensureColumn(TABS.contracts, 'pdfOptionsJson')).setValue(JSON.stringify(clean));
-  return { options: clean };
+}
+
+/* ───────────────────────── Versions ───────────────────────── */
+
+/** Creates the Versions tab on sheets set up before versions existed. */
+function versionsSheet() {
+  const book = ss();
+  let sh = book.getSheetByName(TABS.versions);
+  if (!sh) {
+    sh = book.insertSheet(TABS.versions);
+    sh.appendRow(COLS.Versions);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, COLS.Versions.length).setFontWeight('bold').setBackground('#dcd3c2');
+  }
+  return sh;
+}
+
+function versionData(v) {
+  if (v.dataFileId) return JSON.parse(DriveApp.getFileById(String(v.dataFileId)).getBlob().getDataAsString());
+  return v.dataJson ? JSON.parse(v.dataJson) : null;
+}
+
+function versionRow(v) {
+  const props = PropertiesService.getScriptProperties();
+  return {
+    id: Number(v.id), kind: String(v.kind), name: String(v.name),
+    createdAt: v.createdAt instanceof Date ? v.createdAt.toISOString() : String(v.createdAt),
+    updatedAt: v.updatedAt instanceof Date ? v.updatedAt.toISOString() : String(v.updatedAt || v.createdAt),
+    createdBy: String(v.createdBy || ''), summary: String(v.summary || ''),
+    isDefault: v.kind === 'terms' && String(props.getProperty('DEFAULT_TERMS_VERSION') || '') === String(v.id),
+  };
+}
+
+function listVersions(kind) {
+  versionsSheet();
+  return readTable(TABS.versions).filter(v => !kind || v.kind === kind).map(versionRow).sort((a, b) => b.id - a.id);
+}
+
+function getVersion(id) {
+  versionsSheet();
+  const v = readTable(TABS.versions).find(r => Number(r.id) === id);
+  if (!v) throw new Error('Version not found.');
+  const out = versionRow(v);
+  out.data = versionData(v);
+  return out;
+}
+
+function writeVersionData(obj, name) {
+  const s = JSON.stringify(obj);
+  if (s.length <= 45000) return { dataJson: s, dataFileId: '' };
+  const file = folder('VERSION_FOLDER_ID', 'Versions').createFile(Utilities.newBlob(s, 'application/json', name + '.json'));
+  return { dataJson: '', dataFileId: file.getId() };
+}
+
+function rateBookSummary(c) {
+  const mains = c.items.filter(i => i.parentId === null).length;
+  return c.categories.length + ' categories · ' + mains + ' items · ' + (c.items.length - mains) + ' add-ons';
+}
+
+function termsSummary(t) {
+  const pct = t.payments.reduce((s, p) => s + p.pct, 0);
+  return t.included.length + ' included · ' + t.notIncluded.length + ' not included · ' + t.payments.length +
+    ' payment stages (' + pct + '%) · ' + t.timeline.length + ' phases';
+}
+
+/**
+ * Rate book: saves a snapshot of the live rate book (Categories + Items).
+ * Terms: saves the given included / not included / payments / timeline. With an id, renames and,
+ * for terms, replaces the content.
+ */
+function saveVersion(p, session) {
+  const sh = versionsSheet();
+  const kind = p.kind === 'ratebook' ? 'ratebook' : p.kind === 'terms' ? 'terms' : '';
+  const name = String(p.name || '').trim().slice(0, 80);
+  const now = new Date().toISOString();
+  if (p.id) {
+    const row = findRowIndex(TABS.versions, Number(p.id));
+    if (row < 0) throw new Error('Version not found.');
+    const old = readTable(TABS.versions).find(r => Number(r.id) === Number(p.id));
+    const upd = { id: Number(p.id), kind: old.kind, name: name || old.name, createdAt: old.createdAt, createdBy: old.createdBy,
+      updatedAt: now, summary: old.summary, dataJson: old.dataJson, dataFileId: old.dataFileId };
+    if (old.kind === 'terms' && p.data) {
+      const t = cleanTerms(p.data);
+      Object.assign(upd, writeVersionData(t, upd.name), { summary: termsSummary(t) });
+    }
+    sh.getRange(row, 1, 1, headersOf(TABS.versions).length).setValues([rowFor(TABS.versions, upd)]);
+    return versionRow(upd);
+  }
+  if (!kind) throw new Error('Unknown version type.');
+  if (!name) throw new Error('Give the version a name.');
+  const data = kind === 'ratebook' ? getCatalog() : cleanTerms(p.data);
+  const v = { id: nextId(TABS.versions), kind: kind, name: name, createdAt: now, createdBy: session.email, updatedAt: now,
+    summary: kind === 'ratebook' ? rateBookSummary(data) : termsSummary(data) };
+  Object.assign(v, writeVersionData(data, name));
+  sh.appendRow(rowFor(TABS.versions, v));
+  return versionRow(v);
+}
+
+function deleteVersion(id) {
+  versionsSheet();
+  const v = readTable(TABS.versions).find(r => Number(r.id) === id);
+  if (v && v.dataFileId) { try { DriveApp.getFileById(String(v.dataFileId)).setTrashed(true); } catch (e) { /* gone */ } }
+  const props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('DEFAULT_TERMS_VERSION') || '') === String(id)) props.deleteProperty('DEFAULT_TERMS_VERSION');
+  return deleteRowById(TABS.versions, id);
+}
+
+/** Replaces the live rate book with a saved one. The current rate book is saved first as a backup version. */
+function restoreRateBook(id, session) {
+  const target = getVersion(id);
+  if (target.kind !== 'ratebook' || !target.data) throw new Error('That is not a rate book version.');
+  const backup = saveVersion({ kind: 'ratebook', name: 'Backup before restoring "' + target.name + '"' }, session);
+  const data = target.data;
+  [[TABS.categories, data.categories], [TABS.items, data.items]].forEach(([name, rows]) => {
+    const sh = sheetOf(name);
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent();
+    if (rows.length) {
+      const values = rows.map(r => rowFor(name, Object.assign({}, r, { parentId: r.parentId === null ? '' : r.parentId })));
+      sh.getRange(2, 1, values.length, values[0].length).setValues(values);
+    }
+    if (sh.getLastRow() > rows.length + 1) {
+      // drop any now-empty trailing rows left from a longer rate book
+      const extra = sh.getLastRow() - (rows.length + 1);
+      if (extra > 0) sh.deleteRows(rows.length + 2, extra);
+    }
+  });
+  return { ok: true, backupId: backup.id };
+}
+
+function setDefaultTerms(id) {
+  const props = PropertiesService.getScriptProperties();
+  if (id === null) props.deleteProperty('DEFAULT_TERMS_VERSION');
+  else {
+    const v = getVersion(id);
+    if (v.kind !== 'terms') throw new Error('That is not a terms version.');
+    props.setProperty('DEFAULT_TERMS_VERSION', String(id));
+  }
+  return { ok: true };
+}
+
+/** The terms new quotations start from: the default terms version, or null for the built-in PDF defaults. */
+function defaultTermsData() {
+  const id = PropertiesService.getScriptProperties().getProperty('DEFAULT_TERMS_VERSION');
+  if (!id) return null;
+  try { return getVersion(Number(id)).data; } catch (e) { return null; }
 }
 
 function deleteContract(id) {

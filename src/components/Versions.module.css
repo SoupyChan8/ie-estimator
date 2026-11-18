@@ -1,0 +1,37 @@
+.tab { display: flex; flex-direction: column; gap: var(--spacing-8); }
+.section { display: flex; flex-direction: column; gap: var(--spacing-3); }
+.head { display: flex; align-items: flex-start; gap: var(--spacing-4); margin-bottom: var(--spacing-2); }
+.head > div { flex: 1; }
+.head h2 { margin: 0 0 4px; font-family: var(--font-family-display); font-weight: 400; font-size: 1.7rem; }
+.head p { margin: 0; color: var(--muted-foreground); font-size: 0.92rem; max-width: 62ch; line-height: 1.5; }
+.list { display: flex; flex-direction: column; gap: var(--spacing-2); }
+.row {
+  display: flex; align-items: center; gap: var(--spacing-4);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: var(--spacing-4) var(--spacing-4);
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.rowDefault { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.rowMain { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.name { font-weight: 600; font-size: 1.02rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.meta { color: var(--muted-foreground); font-size: 0.84rem; line-height: 1.45; }
+.defaultTag { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-full); background: var(--accent); color: #fff; }
+.actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.empty, .error { margin: 0; padding: var(--spacing-4); border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--muted-foreground); text-align: center; }
+.error { color: var(--oxide); }
+
+.bar { display: flex; align-items: center; gap: var(--spacing-2); flex-wrap: wrap; padding: var(--spacing-3) var(--spacing-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: var(--spacing-4); color: var(--muted-foreground); }
+.select { width: auto; min-width: 220px; flex: 0 1 300px; }
+.sep { flex: 1; }
+
+.editorOverlay { position: fixed; inset: 0; z-index: 60; background: var(--background); overflow-y: auto; padding: var(--spacing-6); animation: rise 0.35s ease both; }
+.editor { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--spacing-4); }
+.editorHead { display: flex; gap: var(--spacing-3); align-items: center; position: sticky; top: calc(-1 * var(--spacing-6)); background: var(--background); padding: var(--spacing-3) 0; z-index: 2; border-bottom: 1px solid var(--border); }
+.nameInput { flex: 1; font-size: 1.15rem; }
+
+@media (max-width: 760px) {
+  .head, .row { flex-direction: column; align-items: stretch; }
+  .actions { justify-content: flex-start; }
+  .editorHead { flex-wrap: wrap; }
+  .nameInput { flex-basis: 100%; }
+}

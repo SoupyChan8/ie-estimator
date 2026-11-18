@@ -5,6 +5,7 @@ import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { QuotationDocument } from "../components/QuotationDocument";
 import { QuotationOptionsEditor } from "../components/QuotationOptionsEditor";
+import { SaveRateBookVersion, TermsVersionBar, VersionsTab } from "../components/Versions";
 import { withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
@@ -13,7 +14,7 @@ import { blobToBase64, renderPdf, shareOrDownload } from "../lib/quotationPdf";
 import { toast } from "../lib/toast";
 import styles from "./Studio.module.css";
 
-type Tab = "contracts" | "rates" | "settings";
+type Tab = "contracts" | "rates" | "versions" | "settings";
 
 export default function Studio() {
   const { studioOpen, lockStudio } = useSession();
@@ -48,6 +49,7 @@ export default function Studio() {
                 [
                   ["contracts", "Contracts"],
                   ["rates", "Rate book"],
+                  ["versions", "Saved versions"],
                   ["settings", "Settings"],
                 ] as [Tab, string][]
               ).map(([id, label]) => (
@@ -58,6 +60,7 @@ export default function Studio() {
             </nav>
             {tab === "contracts" && <ContractsTab onOpen={setOpenContract} />}
             {tab === "rates" && <RateBookTab />}
+            {tab === "versions" && <VersionsTab />}
             {tab === "settings" && <SettingsTab />}
           </>
         )}
@@ -170,7 +173,7 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       .then((c) => {
         setData(c);
         setDriveUrl(c.pdfUrl);
-        const o = withDefaults(c.pdfOptions);
+        const o = withDefaults(c.pdfOptions ?? c.defaultOptions);
         setOpts(o);
         setSavedOpts(JSON.stringify(o));
       })
@@ -296,11 +299,27 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
               </button>
             </nav>
           </div>
+          <label className={styles.signToggle}>
+            <Switch
+              checked={opts.showSignatures !== false}
+              onChange={(v) => setOpts({ ...opts, showSignatures: v })}
+              label="Previous digital signature"
+            />
+            <span>
+              <strong>Previous digital signature</strong>
+              <small>
+                {opts.showSignatures !== false
+                  ? "On: the signatures and date from the iPad appear on the PDF."
+                  : "Off: blank signature lines, ready to sign on paper."}
+              </small>
+            </span>
+          </label>
           {view === "edit" ? (
             <>
               <p className={styles.muted}>
                 Edit what goes into this client's PDF. Changes are saved to the Google Sheet with this contract.
               </p>
+              <TermsVersionBar value={opts} onApply={setOpts} />
               <QuotationOptionsEditor value={opts} onChange={setOpts} total={data.total} />
               <div className={styles.editBar}>
                 <span className={styles.muted}>{dirty ? "Unsaved changes" : "All changes saved"}</span>
@@ -458,6 +477,7 @@ function RateBookTab() {
         <Button variant="outline" onClick={() => setCatDialog({ name: "" })} className={styles.addCat}>
           <Plus size={16} /> Add category
         </Button>
+        <SaveRateBookVersion />
       </aside>
 
       <section className={styles.itemsPane}>
