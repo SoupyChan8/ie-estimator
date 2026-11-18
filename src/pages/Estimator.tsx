@@ -119,11 +119,10 @@ export default function Estimator() {
   if (step === "welcome") {
     return (
       <main className={styles.welcome}>
-        {brandAssets.cover ? (
-          <img src={brandAssets.cover} alt="" className={styles.welcomeImage} />
-        ) : (
-          <div className={styles.welcomeGlow} aria-hidden />
-        )}
+        <picture>
+          <source media="(orientation: landscape)" srcSet={brandAssets.welcomeLandscape} />
+          <img src={brandAssets.welcomePortrait} alt="" className={styles.welcomeImage} />
+        </picture>
         <div className={styles.welcomeShade} aria-hidden />
         <div className={styles.welcomeInner}>
           <BrandMark tone="light" size="lg" />

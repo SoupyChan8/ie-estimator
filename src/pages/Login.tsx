@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BrandMark } from "../components/BrandMark";
 import { Button, Input } from "../components/ui";
 import { useSession } from "../lib/session";
+import { brandAssets } from "../lib/brandAssets";
 import styles from "./Login.module.css";
 
 export default function Login() {
@@ -26,6 +27,10 @@ export default function Login() {
 
   return (
     <main className={styles.page}>
+      <picture>
+        <source media="(orientation: landscape)" srcSet={brandAssets.welcomeLandscape} />
+        <img src={brandAssets.welcomePortrait} alt="" className={styles.bg} />
+      </picture>
       <div className={styles.glow} aria-hidden />
       <form className={styles.card} onSubmit={submit}>
         <BrandMark size="md" />

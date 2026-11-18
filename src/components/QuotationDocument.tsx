@@ -80,10 +80,7 @@ function PageHead({ num, title }: { num: string; title: string }) {
         <div className={styles.secNum}>{num}</div>
         <div className={styles.secTitle}>{title}</div>
       </div>
-      <div className={styles.miniBrand}>
-        <span>INTERIOR EDITORS</span>
-        <small>SPACES FOR A BETTER YOU</small>
-      </div>
+      <img src={brandAssets.logoDark} alt="Interior Editors" className={styles.miniLogo} />
     </div>
   );
 }
@@ -119,16 +116,10 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
     <div ref={ref} className={`${styles.doc} ${className ?? ""}`}>
       {/* Cover */}
       <section className={`${styles.page} ${styles.cover}`} data-pdf-page>
-        {brandAssets.cover ? <img src={brandAssets.cover} alt="" className={styles.coverImg} /> : <div className={styles.coverGlow} />}
+        <img src={brandAssets.cover} alt="" className={styles.coverImg} />
         <div className={styles.coverShade} />
         <div className={styles.coverInner}>
-          <div className={styles.coverBrand}>
-            <span className={styles.coverMono}>IE</span>
-            <span>
-              <span className={styles.coverName}>INTERIOR EDITORS</span>
-              <span className={styles.coverTag}>SPACES FOR A BETTER YOU</span>
-            </span>
-          </div>
+          <img src={brandAssets.logoLight} alt="Interior Editors" className={styles.coverLogo} />
           <div className={styles.coverKicker}>DESIGN &nbsp;|&nbsp; EXECUTE &nbsp;|&nbsp; TRANSFORM</div>
           <div className={styles.coverTitle}>
             INTERIOR DESIGN
@@ -380,14 +371,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
           <div>✉ &nbsp; {brandAssets.contact.email}</div>
           <div>⌂ &nbsp; {brandAssets.contact.city}</div>
         </div>
-        {brandAssets.logo ? (
-          <img src={brandAssets.logo} alt="Interior Editors" className={styles.logo} />
-        ) : (
-          <div className={styles.logoBox}>
-            <span>INTERIOR</span>
-            <small>EDITORS</small>
-          </div>
-        )}
+        <img src={brandAssets.logoGold} alt="Interior Editors" className={styles.logo} />
         <Foot />
       </section>
     </div>
