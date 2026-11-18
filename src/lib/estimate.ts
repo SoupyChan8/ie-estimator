@@ -95,13 +95,14 @@ function baseQty(item: CatalogItem, bhk: number): number {
   return map[bhk] ?? 0;
 }
 
+/**
+ * Starting quantity for an item. "Carpet area" items (scalesWithArea) take exactly the carpet area the client
+ * entered; their BHK values only say whether they're included for that BHK.
+ */
 function defaultQty(item: CatalogItem, bhk: number, area: number): number {
+  if (item.scalesWithArea) return Math.max(1, Math.round(area > 0 ? area : REF_AREA[bhk] ?? 750));
   let base = baseQty(item, bhk);
   if (base <= 0) base = [item.qtyBhk1, item.qtyBhk2, item.qtyBhk3, item.qtyBhk4].find((q) => q > 0) ?? 1;
-  if (item.scalesWithArea && area > 0) {
-    const ref = REF_AREA[bhk] ?? 750;
-    return Math.max(1, Math.round((base * area) / ref));
-  }
   return base;
 }
 

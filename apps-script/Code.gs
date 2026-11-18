@@ -56,6 +56,7 @@ function doPost(e) {
 
     const session = getSession(req.token);
     if (!session) return json({ error: 'Please sign in again.', code: 'auth' });
+    migrateCarpetArea();
 
     switch (action) {
       case 'me': return json({ email: session.email, name: session.name, studioUntil: session.studioUntil || 0 });
@@ -782,6 +783,70 @@ function savePdf(p) {
   return { url: file.getUrl() };
 }
 
+/* ───────────────────────── Carpet-area items ───────────────────────── */
+
+const REF_AREA = { 1: 450, 2: 750, 3: 1100, 4: 1600 };
+
+/**
+ * "Quantity = carpet area" items: the quantity is the client's carpet area and the BHK columns are just 1/0
+ * (included or not). Older rate books stored a typical quantity per BHK (e.g. 780 sq.ft of ceiling for a
+ * 1,100 sq.ft 3 BHK) with a rate per sq.ft of that; this converts the rate to per carpet sq.ft so a typical
+ * home costs the same. Running-ft / piece items can't be "per carpet sq.ft", so they stop scaling instead.
+ * Items already converted (all BHK values 0 or 1) are left alone.
+ */
+function toCarpetArea(it) {
+  if (!it.scalesWithArea) return it;
+  const q = [it.qtyBhk1, it.qtyBhk2, it.qtyBhk3, it.qtyBhk4].map(num);
+  if (q.every(x => x <= 1)) return it;
+  const out = Object.assign({}, it);
+  if (it.unit !== 'sqft') { out.scalesWithArea = false; return out; }
+  const b = q[2] > 0 ? 3 : q.findIndex(x => x > 0) + 1;
+  const f = q[b - 1] / REF_AREA[b];
+  out.rateStandard = tidyRate(num(it.rateStandard) * f);
+  if (it.ratePremium !== null && it.ratePremium !== '') out.ratePremium = tidyRate(num(it.ratePremium) * f);
+  if (it.rateLuxury !== null && it.rateLuxury !== '') out.rateLuxury = tidyRate(num(it.rateLuxury) * f);
+  out.qtyBhk1 = q[0] > 0 ? 1 : 0; out.qtyBhk2 = q[1] > 0 ? 1 : 0; out.qtyBhk3 = q[2] > 0 ? 1 : 0; out.qtyBhk4 = q[3] > 0 ? 1 : 0;
+  return out;
+}
+
+/** One-time upgrade of the live rate book and every saved rate book version to carpet-area quantities. */
+function migrateCarpetArea() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CARPET_AREA_V2')) return;
+  withLock(() => {
+    if (props.getProperty('CARPET_AREA_V2')) return;
+    // live Items
+    const sh = sheetOf(TABS.items);
+    const head = headersOf(TABS.items);
+    if (sh.getLastRow() > 1) {
+      const range = sh.getRange(2, 1, sh.getLastRow() - 1, head.length);
+      const values = range.getValues().map(r => {
+        const o = {}; head.forEach((h, i) => { o[h] = r[i]; });
+        if (!bool(o.scalesWithArea)) return r;
+        const c = toCarpetArea(Object.assign({}, o, { scalesWithArea: true, unit: String(o.unit),
+          ratePremium: o.ratePremium === '' ? null : o.ratePremium, rateLuxury: o.rateLuxury === '' ? null : o.rateLuxury }));
+        return head.map(h => (c[h] === null || c[h] === undefined ? '' : c[h]));
+      });
+      range.setValues(values);
+    }
+    // saved rate book versions
+    versionsSheet();
+    readTable(TABS.versions).filter(v => v.kind === 'ratebook').forEach(v => {
+      let data; try { data = versionData(v); } catch (e) { return; }
+      if (!data || !data.items) return;
+      const items = data.items.map(toCarpetArea);
+      if (JSON.stringify(items) === JSON.stringify(data.items)) return;
+      const next = { categories: data.categories, items: items };
+      const row = findRowIndex(TABS.versions, Number(v.id));
+      if (v.dataFileId) { try { DriveApp.getFileById(String(v.dataFileId)).setTrashed(true); } catch (e) { /* gone */ } }
+      const upd = Object.assign({}, v, writeVersionData(next, String(v.name)), { hash: rateBookHash(next) });
+      sheetOf(TABS.versions).getRange(row, 1, 1, headersOf(TABS.versions).length).setValues([rowFor(TABS.versions, upd)]);
+    });
+    clearCatalogCache();
+    props.setProperty('CARPET_AREA_V2', String(Date.now()));
+  });
+}
+
 /* ───────────────────────── Sample versions (for testing) ───────────────────────── */
 
 /**
@@ -958,7 +1023,7 @@ function tidyRate(n) {
 }
 
 function buildSampleRateBook(spec) {
-  const base = seedCatalog();
+  const base = seedCatalog(true); // old per-BHK quantities; converted to carpet area at the end
   const items = base.items.map(it => {
     const out = Object.assign({}, it);
     const r = spec.rates[it.name];
@@ -981,7 +1046,7 @@ function buildSampleRateBook(spec) {
       scalesWithArea: a[11], active: true, sortOrder: items.filter(i => i.categoryId === a[0]).length + 1,
     });
   });
-  return { categories: base.categories, items: items };
+  return { categories: base.categories, items: items.map(toCarpetArea) };
 }
 
 /** Sheet menu: adds 3 sample rate book versions and 3 sample terms versions (skips names that already exist). */
@@ -1108,7 +1173,7 @@ function seedRateBook(book) {
 }
 
 /** The starter rate book (mid-market Kolkata rates, 2026) as { categories, items }. */
-function seedCatalog() {
+function seedCatalog(raw) {
   const cats = ['Living Room', 'Dining', 'Kitchen', 'Master Bedroom', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4',
     'Bathrooms', 'False Ceiling & Lighting', 'Painting & Finishes', 'Design & Services'];
   const categories = cats.map((c, i) => ({ id: i + 1, name: c, sortOrder: i + 1 }));
@@ -1191,5 +1256,5 @@ function seedCatalog() {
       scalesWithArea: it[11], active: true, sortOrder: sortCount[it[0]],
     };
   });
-  return { categories: categories, items: items };
+  return { categories: categories, items: raw ? items : items.map(toCarpetArea) };
 }

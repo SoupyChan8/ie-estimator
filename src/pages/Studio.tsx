@@ -544,7 +544,7 @@ function RateBookTab() {
                           )}
                         </div>
                         <div className={styles.itemDesc}>
-                          {i.scalesWithArea && <span className={styles.pill}>scales with area</span>}
+                          {i.scalesWithArea && <span className={styles.pill}>qty = carpet area</span>}
                           {!i.active && <span className={styles.pill}>hidden</span>}
                           {i.description}
                         </div>
@@ -553,10 +553,10 @@ function RateBookTab() {
                       <td className={styles.num} data-label="Standard ₹">{i.rateStandard ? estimate.formatNumber(i.rateStandard) : "Incl."}</td>
                       <td className={styles.num} data-label="Premium ₹">{i.ratePremium == null ? "—" : estimate.formatNumber(i.ratePremium)}</td>
                       <td className={styles.num} data-label="Luxury ₹">{i.rateLuxury == null ? "—" : estimate.formatNumber(i.rateLuxury)}</td>
-                      <td className={styles.num} data-label="1 BHK">{i.qtyBhk1}</td>
-                      <td className={styles.num} data-label="2 BHK">{i.qtyBhk2}</td>
-                      <td className={styles.num} data-label="3 BHK">{i.qtyBhk3}</td>
-                      <td className={styles.num} data-label="4 BHK">{i.qtyBhk4}</td>
+                      <td className={styles.num} data-label="1 BHK">{i.scalesWithArea ? (i.qtyBhk1 > 0 ? "Area" : "—") : i.qtyBhk1}</td>
+                      <td className={styles.num} data-label="2 BHK">{i.scalesWithArea ? (i.qtyBhk2 > 0 ? "Area" : "—") : i.qtyBhk2}</td>
+                      <td className={styles.num} data-label="3 BHK">{i.scalesWithArea ? (i.qtyBhk3 > 0 ? "Area" : "—") : i.qtyBhk3}</td>
+                      <td className={styles.num} data-label="4 BHK">{i.scalesWithArea ? (i.qtyBhk4 > 0 ? "Area" : "—") : i.qtyBhk4}</td>
                     </tr>
                   ))}
                   {items.length === 0 && (
@@ -734,7 +734,7 @@ function ItemDialog(props: {
         </label>
         <label className={styles.field}>
           <span>Unit</span>
-          <select className="input" value={draft.unit} onChange={(e) => set("unit", e.target.value as RateUnit)}>
+          <select className="input" value={draft.unit} disabled={draft.scalesWithArea} onChange={(e) => set("unit", e.target.value as RateUnit)}>
             <option value="sqft">Per sq. ft</option>
             <option value="rft">Per running ft</option>
             <option value="nos">Per piece (nos)</option>
@@ -742,7 +742,43 @@ function ItemDialog(props: {
           </select>
         </label>
 
-        <div className={`${styles.subhead} ${styles.wide}`}>Rate per {estimate.UNIT_LABEL[draft.unit]} (₹)</div>
+        <div className={`${styles.switchRow} ${styles.wide}`}>
+          <Switch
+            checked={draft.scalesWithArea}
+            onChange={(v) =>
+              setDraft((d) =>
+                d
+                  ? {
+                      ...d,
+                      scalesWithArea: v,
+                      unit: v ? "sqft" : d.unit,
+                      // carpet-area items only need on/off per BHK
+                      ...(v
+                        ? {
+                            qtyBhk1: num(d.qtyBhk1) > 0 ? "1" : "0",
+                            qtyBhk2: num(d.qtyBhk2) > 0 ? "1" : "0",
+                            qtyBhk3: num(d.qtyBhk3) > 0 ? "1" : "0",
+                            qtyBhk4: num(d.qtyBhk4) > 0 ? "1" : "0",
+                          }
+                        : {}),
+                    }
+                  : d,
+              )
+            }
+            label="Quantity = carpet area"
+          />
+          <span>
+            Quantity = carpet area
+            <small>
+              On: the quantity is exactly the carpet area the client enters (e.g. 1,400 sq.ft home → 1,400 sq.ft), and the rate is
+              per carpet sq.ft. Use it for painting, false ceiling, wiring, flooring.
+            </small>
+          </span>
+        </div>
+
+        <div className={`${styles.subhead} ${styles.wide}`}>
+          Rate per {draft.scalesWithArea ? "carpet sq.ft" : estimate.UNIT_LABEL[draft.unit]} (₹)
+        </div>
         <div className={`${styles.triple} ${styles.wide}`}>
           <label className={styles.field}>
             <span>Standard</span>
@@ -758,25 +794,23 @@ function ItemDialog(props: {
           </label>
         </div>
 
-        <div className={`${styles.subhead} ${styles.wide}`}>Default quantity by home size</div>
-        <div className={`${styles.quad} ${styles.wide}`}>
-          {(["qtyBhk1", "qtyBhk2", "qtyBhk3", "qtyBhk4"] as const).map((k, i) => (
-            <label key={k} className={styles.field}>
-              <span>{i + 1} BHK</span>
-              <Input {...numTxt(k)} />
-            </label>
-          ))}
+        <div className={`${styles.subhead} ${styles.wide}`}>
+          {draft.scalesWithArea ? "Included by default for" : "Default quantity by home size"}
         </div>
-
-        <div className={`${styles.switchRow} ${styles.wide}`}>
-          <Switch checked={draft.scalesWithArea} onChange={(v) => set("scalesWithArea", v)} label="Scale with carpet area" />
-          <span>
-            Scale with carpet area
-            <small>
-              Defaults are for a typical home ({Object.values(estimate.REF_AREA).join(" / ")} sq.ft for 1–4 BHK) and grow or
-              shrink with the actual area.
-            </small>
-          </span>
+        <div className={`${styles.quad} ${styles.wide}`}>
+          {(["qtyBhk1", "qtyBhk2", "qtyBhk3", "qtyBhk4"] as const).map((k, i) =>
+            draft.scalesWithArea ? (
+              <label key={k} className={styles.bhkToggle}>
+                <Switch checked={num(draft[k]) > 0} onChange={(v) => set(k, v ? "1" : "0")} label={`${i + 1} BHK`} />
+                <span>{i + 1} BHK</span>
+              </label>
+            ) : (
+              <label key={k} className={styles.field}>
+                <span>{i + 1} BHK</span>
+                <Input {...numTxt(k)} />
+              </label>
+            ),
+          )}
         </div>
         <div className={`${styles.switchRow} ${styles.wide}`}>
           <Switch checked={draft.active} onChange={(v) => set("active", v)} label="Show to clients" />

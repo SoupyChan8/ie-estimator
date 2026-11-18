@@ -125,3 +125,4 @@
   .childRow td:first-child::before { display: none; }
   .tab { padding: 10px 11px; font-size: 0.86rem; }
 }
+.bhkToggle { display: flex; align-items: center; gap: 10px; font-weight: 500; padding: 8px 0; }
