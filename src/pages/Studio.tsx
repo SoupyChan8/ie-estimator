@@ -234,9 +234,9 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       const blob = await renderPdf(exportRef.current);
       const res = await api<{ url: string }>("savePdf", { contractId: data.id, filename, base64: await blobToBase64(blob) });
       setDriveUrl(res.url);
-      toast.success("PDF saved to Google Drive");
+      toast.success("PDF saved to the cloud");
     } catch (e) {
-      toast.error("Couldn't save to Drive", (e as Error).message);
+      toast.error("Couldn't save the PDF", (e as Error).message);
     } finally {
       setBusy("");
     }
@@ -267,11 +267,11 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
           </Button>
           {driveUrl && (
             <a className="btn btn-ghost" href={driveUrl} target="_blank" rel="noreferrer">
-              <ExternalLink size={16} /> Open in Drive
+              <ExternalLink size={16} /> Open saved PDF
             </a>
           )}
           <Button variant="outline" onClick={saveToDrive} disabled={!data || !!busy}>
-            <CloudUpload size={16} /> {busy === "drive" ? "Saving…" : driveUrl ? "Re-save to Drive" : "Save to Drive"}
+            <CloudUpload size={16} /> {busy === "drive" ? "Saving…" : driveUrl ? "Re-save PDF" : "Save PDF to cloud"}
           </Button>
           <Button onClick={download} disabled={!data || !!busy}>
             <Download size={16} /> {busy === "download" ? "Creating PDF…" : "Download PDF"}

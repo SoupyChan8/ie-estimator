@@ -1,4 +1,5 @@
 import { API_URL } from "../config";
+import { AUTH_STORAGE_KEY, callSupabase, usingSupabase } from "./backend";
 
 export class ApiError extends Error {
   code?: string;
@@ -13,6 +14,8 @@ const TOKEN_KEY = "ie-token";
 export const tokenStore = {
   get(): string {
     try {
+      // With Supabase, the signed-in session lives under its own key.
+      if (usingSupabase) return localStorage.getItem(AUTH_STORAGE_KEY) ? "supabase" : "";
       return localStorage.getItem(TOKEN_KEY) ?? "";
     } catch {
       return "";
@@ -28,6 +31,7 @@ export const tokenStore = {
   clear() {
     try {
       localStorage.removeItem(TOKEN_KEY);
+      if (usingSupabase) localStorage.removeItem(AUTH_STORAGE_KEY);
     } catch {
       /* ignore */
     }
@@ -53,6 +57,23 @@ export function onAuthError(fn: Listener) {
 }
 
 export async function api<T>(action: string, payload?: unknown): Promise<T> {
+  if (usingSupabase) {
+    let out: unknown;
+    try {
+      out = await callSupabase(action, payload);
+    } catch (e) {
+      const err = e as { message?: string; code?: string };
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      const msg = offline || /Failed to fetch|NetworkError|Load failed/i.test(err.message ?? "")
+        ? "No internet connection. Check the Wi-Fi and try again."
+        : err.message || "Something went wrong.";
+      if (err.code) listeners.forEach((l) => l(err.code as string));
+      throw new ApiError(msg, err.code);
+    }
+    const st = (out as { state?: RateBookState } | null)?.state;
+    if (st && st.catalog) stateListeners.forEach((l) => l(st));
+    return out as T;
+  }
   if (!API_URL) throw new ApiError("The app isn't connected to its Google Sheet yet (API_URL is empty).");
   let res: Response;
   try {

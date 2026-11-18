@@ -1088,6 +1088,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Add sample versions (for testing)', 'addSampleVersions')
     .addToUi();
+  if (typeof onOpenSupabase_ === 'function') onOpenSupabase_(SpreadsheetApp.getUi());
 }
 
 function setupSheets() {
