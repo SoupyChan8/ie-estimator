@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { BookCopy, Check, History, Pencil, Plus, Save, Star, Trash2 } from "lucide-react";
 import { Button, Input, Modal, Skeleton } from "./ui";
 import { QuotationOptionsEditor } from "./QuotationOptionsEditor";
@@ -313,7 +314,8 @@ function TermsVersions() {
         )}
       />
 
-      {editing && (
+      {editing &&
+        createPortal(
         <div className={styles.editorOverlay} role="dialog" aria-modal="true" aria-label="Edit terms version">
           <div className={styles.editor}>
             <div className={styles.editorHead}>
@@ -336,7 +338,8 @@ function TermsVersions() {
               onChange={(data) => setEditing((x) => (x ? { ...x, data } : x))}
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );

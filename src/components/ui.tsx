@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -51,7 +52,8 @@ export function Modal(props: {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Portal to <body> so the dialog is never trapped under a parent's stacking layer.
+  return createPortal(
     <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${className}`} role="dialog" aria-modal="true" aria-label={title}>
         <button className="modal-close" onClick={onClose} aria-label="Close">
@@ -62,6 +64,7 @@ export function Modal(props: {
         {children}
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
