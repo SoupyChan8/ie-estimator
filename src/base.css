@@ -313,3 +313,9 @@ img, svg, video { max-width: 100%; }
   .toaster { left: 12px; right: 12px; transform: none; width: auto; }
   .btn { min-height: 44px; }
 }
+
+/* ───────── Behave like a native app: no text cursor or selection outside fields you type in ───────── */
+html { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: default; caret-color: transparent; }
+input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-select: text; cursor: text; caret-color: auto; }
+button, a, select, summary, label:has(input[type="checkbox"]), [role="button"], [role="switch"], [role="tab"] { cursor: pointer; }
+button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
