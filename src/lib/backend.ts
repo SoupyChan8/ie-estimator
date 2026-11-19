@@ -491,9 +491,22 @@ async function getContract(p: { id: number }): Promise<ContractFull> {
 }
 
 async function saveContractOptions(p: { id: number; options: QuotationOptions }) {
-  const clean = { ...cleanTerms(p.options), showSignatures: !(p.options && p.options.showSignatures === false) };
-  check(await sb().from("contracts").update({ pdf_options: clean }).eq("id", p.id));
-  return { options: clean };
+  const clean = {
+    ...cleanTerms(p.options),
+    showSignatures: !(p.options && p.options.showSignatures === false),
+    validity: str(p.options?.validity, 40) || "15 Days",
+  };
+  const cur = check(await sb().from("contracts").select("quotation_no").eq("id", p.id).maybeSingle());
+  if (!cur) throw new BackendError("Contract not found.");
+  const wanted = str(p.options?.quotationNo, 40);
+  const upd: Record<string, unknown> = { pdf_options: clean };
+  if (wanted && wanted !== cur.quotation_no) upd.quotation_no = wanted;
+  const res = await sb().from("contracts").update(upd).eq("id", p.id);
+  if (res.error) {
+    if (/duplicate|unique/i.test(res.error.message)) throw new BackendError(`Quotation number ${wanted} is already used by another contract.`);
+    throw new BackendError(res.error.message);
+  }
+  return { options: clean, quotationNo: (upd.quotation_no as string) ?? cur.quotation_no };
 }
 
 async function savePdf(p: { contractId: number; filename: string; blob?: Blob; base64?: string }) {
@@ -503,6 +516,8 @@ async function savePdf(p: { contractId: number; filename: string; blob?: Blob; b
     p.blob ??
     new Blob([Uint8Array.from(atob(String(p.base64 ?? "")), (ch) => ch.charCodeAt(0))], { type: "application/pdf" });
   const path = `${String(c.quotation_no).replace(/[^\w-]/g, "_")}.pdf`;
+  // quotation renumbered since the last save: drop the old file
+  if (c.pdf_path && c.pdf_path !== path) await sb().storage.from("quotations").remove([c.pdf_path]);
   const up = await sb().storage.from("quotations").upload(path, blob, { upsert: true, contentType: "application/pdf" });
   if (up.error) throw new BackendError(up.error.message);
   check(await sb().from("contracts").update({ pdf_path: path }).eq("id", p.contractId));

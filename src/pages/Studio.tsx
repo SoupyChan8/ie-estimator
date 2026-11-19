@@ -6,7 +6,7 @@ import { BrandMark } from "../components/BrandMark";
 import { QuotationDocument } from "../components/QuotationDocument";
 import { QuotationOptionsEditor } from "../components/QuotationOptionsEditor";
 import { RateBookVersionBar, TermsVersionBar, VersionsTab } from "../components/Versions";
-import { withDefaults, type QuotationOptions } from "../lib/quotationOptions";
+import { DEFAULT_VALIDITY, withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
 import { estimate, type CatalogItem, type ContractFull, type ContractSummary, type RateUnit } from "../lib/estimate";
@@ -173,7 +173,8 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       .then((c) => {
         setData(c);
         setDriveUrl(c.pdfUrl);
-        const o = withDefaults(c.pdfOptions ?? c.defaultOptions);
+        // terms come from this contract's edits or the terms version in use; validity / number are per contract
+        const o = { ...withDefaults(c.pdfOptions ?? c.defaultOptions), validity: c.pdfOptions?.validity || DEFAULT_VALIDITY, quotationNo: c.quotationNo };
         setOpts(o);
         setSavedOpts(JSON.stringify(o));
       })
@@ -195,8 +196,9 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
     if (!data || !opts) return false;
     if (!dirty) return true;
     try {
-      const res = await api<{ options: QuotationOptions }>("saveContractOptions", { id: data.id, options: opts });
-      const o = withDefaults(res.options);
+      const res = await api<{ options: QuotationOptions; quotationNo: string }>("saveContractOptions", { id: data.id, options: opts });
+      const o = { ...withDefaults(res.options), quotationNo: res.quotationNo };
+      if (res.quotationNo && res.quotationNo !== data.quotationNo) setData({ ...data, quotationNo: res.quotationNo });
       setOpts(o);
       setSavedOpts(JSON.stringify(o));
       if (!quiet) toast.success("Quotation details saved");
@@ -317,8 +319,28 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
           {view === "edit" ? (
             <>
               <p className={styles.muted}>
-                Edit what goes into this client's PDF. Changes are saved to the Google Sheet with this contract.
+                Edit what goes into this client's PDF. Changes are saved with this contract.
               </p>
+              <div className={styles.docFields}>
+                <label className={styles.field}>
+                  <span>Quotation No.</span>
+                  <Input
+                    value={opts.quotationNo ?? ""}
+                    onChange={(e) => setOpts({ ...opts, quotationNo: e.target.value })}
+                    placeholder={data.quotationNo}
+                    autoComplete="off"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Quotation validity</span>
+                  <Input
+                    value={opts.validity ?? ""}
+                    onChange={(e) => setOpts({ ...opts, validity: e.target.value })}
+                    placeholder="15 Days"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
               <TermsVersionBar value={opts} onApply={setOpts} />
               <QuotationOptionsEditor value={opts} onChange={setOpts} total={data.total} />
               <div className={styles.editBar}>

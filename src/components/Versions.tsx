@@ -233,13 +233,13 @@ export function TermsVersionBar({ value, onApply }: { value: QuotationOptions; o
   const [saving, setSaving] = useState(false);
   const apply = async () => {
     if (pick === "__builtin") {
-      onApply({ ...DEFAULT_OPTIONS, showSignatures: value.showSignatures });
+      onApply({ ...DEFAULT_OPTIONS, showSignatures: value.showSignatures, quotationNo: value.quotationNo, validity: value.validity });
       toast("Loaded the original PDF terms", "Save to keep them for this contract.");
       return;
     }
     try {
       const v = await api<VersionFull>("getVersion", { id: Number(pick) });
-      onApply({ ...withDefaults(v.data as QuotationOptions), showSignatures: value.showSignatures });
+      onApply({ ...withDefaults(v.data as QuotationOptions), showSignatures: value.showSignatures, quotationNo: value.quotationNo, validity: value.validity });
       toast(`Loaded "${v.name}"`, "Save to keep it for this contract.");
     } catch (e) {
       toast.error("Couldn't load that version", (e as Error).message);

@@ -66,6 +66,8 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
   const opts = options ?? withDefaults(contract.pdfOptions ?? contract.defaultOptions);
   const { included: INCLUDED, notIncluded: NOT_INCLUDED, payments: PAYMENTS, timeline: TIMELINE } = opts;
   const signed = opts.showSignatures !== false;
+  const quotationNo = opts.quotationNo || contract.quotationNo;
+  const validity = opts.validity || "15 Days";
   const dense = INCLUDED.length + NOT_INCLUDED.length > 13;
   const groups = estimate.groupByCategory(contract.lineItems);
 
@@ -128,7 +130,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
             <div className={styles.coverRule} />
             <div className={styles.coverLine}>A home that feels like you</div>
             <div className={styles.coverFor}>
-              Prepared for <strong>{contract.clientName}</strong> · {contract.quotationNo}
+              Prepared for <strong>{contract.clientName}</strong> · {quotationNo}
             </div>
           </div>
           <div className={styles.coverWeb}>{brandAssets.contact.website}</div>
@@ -148,9 +150,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
                   ["Address", contract.siteAddress || "—"],
                   ["Configuration", `${contract.bhk} BHK · ${tierLabel} finish`],
                   ["Carpet Area", `${estimate.formatNumber(contract.carpetArea)} sq. ft. approx`],
-                  ["Quotation No.", contract.quotationNo],
+                  ["Quotation No.", quotationNo],
                   ["Date", dateStr],
-                  ["Quotation Validity", "15 Days"],
+                  ["Quotation Validity", validity],
                 ].map(([k, v]) => (
                   <tr key={k}>
                     <th>{k}</th>

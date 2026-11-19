@@ -8,6 +8,10 @@ export type QuotationOptions = {
   timeline: TimelinePhase[];
   /** Put the signatures captured on the iPad into the PDF. Per contract; not part of terms versions. */
   showSignatures?: boolean;
+  /** Per contract: the quotation number printed on the PDF (renames the contract when saved). */
+  quotationNo?: string;
+  /** Per contract: how long the quotation is valid, e.g. "15 Days". */
+  validity?: string;
 };
 
 /** Defaults taken from the Interior Editors quotation PDF. */
@@ -45,6 +49,8 @@ export const DEFAULT_OPTIONS: QuotationOptions = {
   ],
 };
 
+export const DEFAULT_VALIDITY = "15 Days";
+
 export function withDefaults(o: Partial<QuotationOptions> | null | undefined): QuotationOptions {
   return {
     included: o?.included ?? DEFAULT_OPTIONS.included,
@@ -52,5 +58,7 @@ export function withDefaults(o: Partial<QuotationOptions> | null | undefined): Q
     payments: o?.payments ?? DEFAULT_OPTIONS.payments,
     timeline: o?.timeline ?? DEFAULT_OPTIONS.timeline,
     showSignatures: o?.showSignatures ?? true,
+    validity: o?.validity || DEFAULT_VALIDITY,
+    ...(o?.quotationNo ? { quotationNo: o.quotationNo } : {}),
   };
 }
