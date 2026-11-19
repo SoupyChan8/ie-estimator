@@ -420,7 +420,7 @@ function saveContract(p, session) {
   if (!clientName) throw new Error('Client name is required.');
   if (TIERS.indexOf(p.tier) < 0) throw new Error('Invalid tier.');
   const bhk = Number(p.bhk);
-  if (!(bhk >= 1 && bhk <= 4)) throw new Error('Invalid BHK.');
+  if (!(bhk >= 1 && bhk <= 10)) throw new Error('Invalid BHK.');
   const lines = (Array.isArray(p.lineItems) ? p.lineItems : []).slice(0, 300).map(l => {
     const qty = Math.max(0, num(l.qty));
     const rate = Math.max(0, num(l.rate));

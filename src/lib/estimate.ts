@@ -92,9 +92,17 @@ const TIERS: Record<Tier, { label: string; tag: string; tagline: string; materia
 
 const UNIT_LABEL: Record<RateUnit, string> = { sqft: "sq.ft", rft: "r.ft", nos: "nos", lumpsum: "lot" };
 
+
+/** Typical carpet area for a home size; 5+ BHK adds about 400 sq.ft per extra bedroom. */
+function refArea(bhk: number): number {
+  return bhk <= 4 ? REF_AREA[bhk] ?? 750 : REF_AREA[4] + (bhk - 4) * 400;
+}
+
+/** The rate book's quantity column for this home size (5+ BHK reads the 4 BHK column, which expandForBhk prepares). */
 function baseQty(item: CatalogItem, bhk: number): number {
+  const b = Math.min(Math.max(bhk, 1), 4);
   const map: Record<number, number> = { 1: item.qtyBhk1, 2: item.qtyBhk2, 3: item.qtyBhk3, 4: item.qtyBhk4 };
-  return map[bhk] ?? 0;
+  return map[b] ?? 0;
 }
 
 /**
@@ -102,7 +110,7 @@ function baseQty(item: CatalogItem, bhk: number): number {
  * entered; their BHK values only say whether they're included for that BHK.
  */
 function defaultQty(item: CatalogItem, bhk: number, area: number): number {
-  if (item.scalesWithArea) return Math.max(1, Math.round(area > 0 ? area : REF_AREA[bhk] ?? 750));
+  if (item.scalesWithArea) return Math.max(1, Math.round(area > 0 ? area : refArea(bhk)));
   let base = baseQty(item, bhk);
   if (base <= 0) base = [item.qtyBhk1, item.qtyBhk2, item.qtyBhk3, item.qtyBhk4].find((q) => q > 0) ?? 1;
   return base;
@@ -136,6 +144,44 @@ function orderItems(items: CatalogItem[], categories?: CatalogCategory[]): Catal
 }
 
 const childrenOf = (items: CatalogItem[], id: number) => items.filter((i) => i.parentId === id);
+
+/**
+ * The rate book has quantity columns for 1–4 BHK. For a 5+ BHK home:
+ *  • extra bedrooms (Bedroom 5, 6, …) are added as copies of the highest-numbered "Bedroom N" room;
+ *  • rooms named "…bedroom…" keep their 4 BHK quantities (it's still one room each);
+ *  • everything else grows by the same step as from 3 to 4 BHK for each extra bedroom
+ *    (e.g. one more vanity per bedroom), carpet-area items simply use the area.
+ * The result puts the 5+ BHK quantities in the 4 BHK column, which baseQty reads for bhk > 4.
+ */
+function expandForBhk(catalog: Catalog, bhk: number): Catalog {
+  if (bhk <= 4) return catalog;
+  const extra = bhk - 4;
+  const isBedroom = (name: string) => /bedroom/i.test(name);
+  const roomCat = new Map(catalog.categories.map((c) => [c.id, isBedroom(c.name)]));
+  const items = catalog.items.map((i) => {
+    if (roomCat.get(i.categoryId) || i.scalesWithArea) return i;
+    const step = Math.max(0, i.qtyBhk4 - i.qtyBhk3);
+    return step ? { ...i, qtyBhk4: i.qtyBhk4 + extra * step } : i;
+  });
+  // the template for extra bedrooms: the highest-numbered "Bedroom N"
+  const numbered = catalog.categories
+    .map((c) => ({ c, n: Number(/^bedroom\s*(\d+)$/i.exec(c.name.trim())?.[1] ?? NaN) }))
+    .filter((x) => Number.isFinite(x.n))
+    .sort((a, b) => b.n - a.n);
+  const tpl = numbered[0];
+  if (!tpl) return { categories: catalog.categories, items };
+  const tplItems = catalog.items.filter((i) => i.categoryId === tpl.c.id);
+  const categories = [...catalog.categories];
+  const at = categories.findIndex((c) => c.id === tpl.c.id) + 1; // extra bedrooms go right after the template
+  for (let k = 1; k <= extra; k++) {
+    const n = tpl.n + k;
+    const catId = -(n * 1000 + tpl.c.id);
+    categories.splice(at + k - 1, 0, { id: catId, name: `Bedroom ${n}`, sortOrder: tpl.c.sortOrder + k / 1000 });
+    const vid = (id: number) => -(n * 100000 + id);
+    for (const i of tplItems) items.push({ ...i, id: vid(i.id), categoryId: catId, parentId: i.parentId == null ? null : vid(i.parentId) });
+  }
+  return { categories, items };
+}
 
 /** `overrides`: rates agreed with the client, by item id; they replace the rate book rate. */
 function buildLineItems(catalog: Catalog, quantities: Record<number, number>, tier: Tier, overrides?: Record<number, number>): LineItem[] {
@@ -188,8 +234,13 @@ function formatDate(d: Date | string): string {
   return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
 }
 
+const MAX_BHK = 10;
+
 export const estimate = {
+  MAX_BHK,
   REF_AREA,
+  refArea,
+  expandForBhk,
   TIERS,
   UNIT_LABEL,
   baseQty,

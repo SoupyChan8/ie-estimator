@@ -249,3 +249,10 @@
 .fsBtn:hover, .fsBtn:focus-visible { background: var(--muted); }
 /* in full screen the page fills the whole display, so give the header room for the iPad's corner radius */
 :global(html:fullscreen) body, :global(html:-webkit-full-screen) body { background: var(--background); }
+
+/* 5+ BHK card */
+.bhkMore { display: inline-flex; align-items: center; gap: 10px; }
+.bhkStep { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid currentColor; opacity: 0.85; cursor: pointer; }
+.bhkStepOff { opacity: 0.3; cursor: default; }
+@media (min-width: 641px) { .bhkGrid { grid-template-columns: repeat(5, 1fr); } }
+@media (max-width: 640px) { .bhkGrid { grid-template-columns: repeat(3, 1fr); } }

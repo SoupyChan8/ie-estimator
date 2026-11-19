@@ -432,7 +432,7 @@ async function saveContract(p: Record<string, unknown>) {
   if (!clientName) throw new BackendError("Client name is required.");
   if (!(TIERS as readonly string[]).includes(String(p.tier))) throw new BackendError("Invalid tier.");
   const bhk = Number(p.bhk);
-  if (!(bhk >= 1 && bhk <= 4)) throw new BackendError("Invalid BHK.");
+  if (!(bhk >= 1 && bhk <= 10)) throw new BackendError("Invalid BHK.");
   const lines: LineItem[] = (Array.isArray(p.lineItems) ? (p.lineItems as LineItem[]) : []).slice(0, 300).map((l) => {
     const qty = Math.max(0, n(l.qty));
     const rate = Math.max(0, n(l.rate));

@@ -39,7 +39,7 @@ type ClientDetails = {
 };
 
 export default function Estimator() {
-  const { catalog, catalogError, reloadCatalog, user, logout } = useSession();
+  const { catalog: rateBook, catalogError, reloadCatalog, user, logout } = useSession();
   const emptyDetails: ClientDetails = {
     clientName: "",
     clientPhone: "",
@@ -52,6 +52,8 @@ export default function Estimator() {
   const fullscreen = useFullscreen();
   useStatusBarColor(step === "welcome" ? BAR.welcome : BAR.light);
   const [bhk, setBhk] = useState<number | null>(null);
+  // the rate book as seen for this home size (5+ BHK gets extra bedrooms; see estimate.expandForBhk)
+  const catalog = useMemo(() => (rateBook ? estimate.expandForBhk(rateBook, bhk ?? 0) : null), [rateBook, bhk]);
   const [areaText, setAreaText] = useState("");
   const [committedHome, setCommittedHome] = useState("");
   const [qty, setQty] = useState<Record<number, number>>({});
@@ -378,6 +380,11 @@ export default function Estimator() {
 
 function HomeStep(props: { bhk: number | null; setBhk: (n: number) => void; areaText: string; setAreaText: (s: string) => void }) {
   const { bhk, setBhk, areaText, setAreaText } = props;
+  // stepping 5+ BHK: the suggested area follows, unless an area of their own was typed
+  const stepBhk = (n: number) => {
+    if (bhk != null && (!areaText || areaText === String(estimate.refArea(bhk)))) setAreaText(String(estimate.refArea(n)));
+    setBhk(n);
+  };
   return (
     <div className={styles.stepWrap}>
       <p className={styles.kicker}>01 · YOUR HOME</p>
@@ -393,13 +400,50 @@ function HomeStep(props: { bhk: number | null; setBhk: (n: number) => void; area
             className={`${styles.bhkCard} ${bhk === n ? styles.bhkActive : ""}`}
             onClick={() => {
               setBhk(n);
-              if (!areaText) setAreaText(String(estimate.REF_AREA[n]));
+              if (!areaText) setAreaText(String(estimate.refArea(n)));
             }}
           >
             <span className={styles.bhkNum}>{n}</span>
             <span className={styles.bhkText}>BHK</span>
           </button>
         ))}
+        <button
+          type="button"
+          className={`${styles.bhkCard} ${bhk != null && bhk > 4 ? styles.bhkActive : ""}`}
+          onClick={() => {
+            if (bhk == null || bhk <= 4) {
+              setBhk(5);
+              if (!areaText) setAreaText(String(estimate.refArea(5)));
+            }
+          }}
+        >
+          {bhk != null && bhk > 4 ? (
+            <span className={styles.bhkMore} onClick={(e) => e.stopPropagation()}>
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Fewer bedrooms"
+                className={`${styles.bhkStep} ${bhk <= 5 ? styles.bhkStepOff : ""}`}
+                onClick={() => bhk > 5 && stepBhk(bhk - 1)}
+              >
+                <Minus size={16} />
+              </span>
+              <span className={styles.bhkNum}>{bhk}</span>
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="More bedrooms"
+                className={`${styles.bhkStep} ${bhk >= estimate.MAX_BHK ? styles.bhkStepOff : ""}`}
+                onClick={() => bhk < estimate.MAX_BHK && stepBhk(bhk + 1)}
+              >
+                <Plus size={16} />
+              </span>
+            </span>
+          ) : (
+            <span className={styles.bhkNum}>5+</span>
+          )}
+          <span className={styles.bhkText}>BHK</span>
+        </button>
       </div>
 
       <div className={styles.fieldLabel}>Carpet area</div>
@@ -416,7 +460,7 @@ function HomeStep(props: { bhk: number | null; setBhk: (n: number) => void; area
       {bhk && (
         <div className={styles.areaChips}>
           {[0.8, 1, 1.25, 1.5].map((f) => {
-            const v = Math.round((estimate.REF_AREA[bhk] * f) / 50) * 50;
+            const v = Math.round((estimate.refArea(bhk) * f) / 50) * 50;
             return (
               <button key={f} type="button" className={styles.chip} onClick={() => setAreaText(String(v))}>
                 {v} sq.ft

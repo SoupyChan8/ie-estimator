@@ -46,7 +46,7 @@ create table if not exists public.contracts (
   client_email        text not null default '',
   site_address        text not null default '',
   project_scope       text not null default '',
-  bhk                 integer not null check (bhk between 1 and 4),
+  bhk                 integer not null check (bhk between 1 and 10),
   carpet_area         numeric not null default 0,
   tier                text not null check (tier in ('standard', 'premium', 'luxury')),
   total               numeric not null default 0,

@@ -12,7 +12,7 @@ Live: **https://soupychan8.github.io/ie-estimator/**
 
 ## How the client flow works
 
-1. **Home**: BHK (1–4) and carpet area.
+1. **Home**: BHK and carpet area. **5+** steps from 5 to 10 BHK. The rate book only has 1–4 BHK columns, so a 5+ home uses the 4 BHK quantities. Extra bedrooms (Bedroom 5, 6, …) are copied from the highest-numbered "Bedroom N" room, and other countable items grow by their 3→4 BHK step per extra bedroom.
 2. **Scope**: rooms and pieces, with add-ons nested under their main item (e.g. Puja Unit under TV Unit). A room appears only if one of its main items applies to that BHK.
 3. **Sizes**: quantities start from the rate book defaults and can be changed. "Carpet area" items (painting, false ceiling, wiring, flooring) take the carpet area as their quantity.
 4. **Finish**: Standard, Premium or Luxury.
