@@ -306,8 +306,8 @@ async function rateBookMatch(rows: VersionRow[], live: Catalog) {
   return { matchId, baseId: matchId ?? activeId };
 }
 
-async function listVersions(p: { kind?: "ratebook" | "terms" }, live?: Catalog): Promise<VersionInfo[]> {
-  let q = sb().from("versions").select("id, kind, name, created_at, updated_at, created_by, summary, hash");
+async function listVersions(p: { kind?: "ratebook" | "terms"; withData?: boolean }, live?: Catalog): Promise<VersionInfo[]> {
+  let q = sb().from("versions").select("id, kind, name, created_at, updated_at, created_by, summary, hash" + (p.withData ? ", data" : ""));
   if (p.kind) q = q.eq("kind", p.kind);
   const rows = (check(await q) as VersionRow[]).map((r) => ({ ...r, id: Number(r.id) }));
   const defaultTerms = await getSetting("default_terms_version");
@@ -318,6 +318,7 @@ async function listVersions(p: { kind?: "ratebook" | "terms" }, live?: Catalog):
         id: v.id, kind: v.kind, name: v.name, createdAt: v.created_at, updatedAt: v.updated_at || v.created_at,
         createdBy: v.created_by ?? "", summary: v.summary ?? "",
         isDefault: v.kind === "terms" && defaultTerms === String(v.id),
+        ...(p.withData ? { data: v.data } : {}),
       };
       if (v.kind === "ratebook" && match) {
         out.isActive = match.matchId === v.id;

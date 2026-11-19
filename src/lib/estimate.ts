@@ -222,4 +222,6 @@ export type VersionInfo = {
   /** Rate book: the live rate book is a custom (unsaved) edit that started from this version. */
   isBase?: boolean;
   edited?: boolean;
+  /** Only when asked for (withData): the version's content. */
+  data?: unknown;
 };

@@ -227,54 +227,149 @@ export function RateBookVersionBar() {
 }
 
 /** In a contract's Quotation details: load a saved terms version, or save the current terms as one. */
+type TermsPart = Pick<QuotationOptions, "included" | "notIncluded" | "payments" | "timeline">;
+
+/** The terms content only, tidied the way the server stores it, for comparing with saved versions. */
+function termsKey(o: Partial<QuotationOptions> | null | undefined): string {
+  const t = (v: unknown) => String(v ?? "").trim();
+  const list = (a: unknown) => (Array.isArray(a) ? a : []).map(t).filter(Boolean);
+  return JSON.stringify({
+    i: list(o?.included),
+    n: list(o?.notIncluded),
+    p: (o?.payments ?? []).map((x) => [Number(x.pct) || 0, t(x.title), t(x.sub)]).filter((x) => x[0] || x[1]),
+    t: (o?.timeline ?? []).map((x) => [t(x.title), t(x.sub)]).filter((x) => x[0]),
+  });
+}
+const termsOnly = (o: QuotationOptions): TermsPart => ({
+  included: o.included, notIncluded: o.notIncluded, payments: o.payments, timeline: o.timeline,
+});
+
+const BUILTIN = "builtin";
+const BUILTIN_NAME = "Original PDF terms";
+
+/**
+ * In a contract's Quotation details: which terms version these points match ("Currently using"), or
+ * "Custom" once they've been edited; switch versions, update the one they came from, or save as new.
+ */
 export function TermsVersionBar({ value, onApply }: { value: QuotationOptions; onApply: (o: QuotationOptions) => void }) {
-  const { list, reload } = useVersions("terms");
+  const [versions, setVersions] = useState<VersionInfo[] | null>(null);
+  const [base, setBase] = useState<string | null>(null); // version the custom edits started from
   const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState("");
   const [saving, setSaving] = useState(false);
-  const apply = async () => {
-    if (pick === "__builtin") {
-      onApply({ ...DEFAULT_OPTIONS, showSignatures: value.showSignatures, quotationNo: value.quotationNo, validity: value.validity });
-      toast("Loaded the original PDF terms", "Save to keep them for this contract.");
-      return;
-    }
+
+  const load = useCallback(async () => {
     try {
-      const v = await api<VersionFull>("getVersion", { id: Number(pick) });
-      onApply({ ...withDefaults(v.data as QuotationOptions), showSignatures: value.showSignatures, quotationNo: value.quotationNo, validity: value.validity });
-      toast(`Loaded "${v.name}"`, "Save to keep it for this contract.");
+      const list = await api<VersionInfo[]>("listVersions", { kind: "terms", withData: true });
+      // older backends don't send the content with the list
+      const full = await Promise.all(
+        list.map(async (v) => (v.data !== undefined ? v : { ...v, data: (await api<VersionFull>("getVersion", { id: v.id })).data })),
+      );
+      setVersions(full);
     } catch (e) {
-      toast.error("Couldn't load that version", (e as Error).message);
+      toast.error("Couldn't load the saved terms", (e as Error).message);
+      setVersions([]);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const key = termsKey(value);
+  const options = [
+    ...(versions ?? []).map((v) => ({ id: String(v.id), name: v.name, isDefault: v.isDefault, key: termsKey(v.data as QuotationOptions) })),
+    { id: BUILTIN, name: BUILTIN_NAME, isDefault: !(versions ?? []).some((v) => v.isDefault), key: termsKey(DEFAULT_OPTIONS) },
+  ];
+  // prefer the version they came from, then the one in use for new quotations, then the newest
+  const matches = options.filter((o) => o.key === key);
+  const match = matches.find((o) => o.id === base) ?? matches.find((o) => o.isDefault) ?? matches[0] ?? null;
+  const current = match ? match.id : "custom";
+  const baseOpt = options.find((o) => o.id === base) ?? null;
+
+  useEffect(() => {
+    if (match) setBase(match.id);
+  }, [match?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setPick(current);
+  }, [current]);
+
+  const keep = { showSignatures: value.showSignatures, quotationNo: value.quotationNo, validity: value.validity };
+
+  const use = () => {
+    const target = options.find((o) => o.id === pick);
+    if (!target) return;
+    if (!match && !window.confirm(`Replace the custom points on this quotation with "${target.name}"?`)) return;
+    const data =
+      target.id === BUILTIN ? DEFAULT_OPTIONS : withDefaults(versions?.find((v) => String(v.id) === target.id)?.data as QuotationOptions);
+    onApply({ ...withDefaults(data), ...keep });
+    setBase(target.id);
+    toast(`Now using "${target.name}"`, "Save to keep it for this contract.");
+  };
+
+  const update = async () => {
+    if (!baseOpt || baseOpt.id === BUILTIN) return;
+    if (!window.confirm(`Overwrite the saved version "${baseOpt.name}" with these points? Other contracts that already use it keep their own copy.`)) return;
+    setBusy("update");
+    try {
+      await api("saveVersion", { id: Number(baseOpt.id), kind: "terms", name: baseOpt.name, data: termsOnly(value) });
+      await load();
+      toast.success(`"${baseOpt.name}" updated`);
+    } catch (e) {
+      toast.error("Couldn't update the version", (e as Error).message);
+    } finally {
+      setBusy("");
     }
   };
+
   return (
-    <div className={styles.bar}>
-      <BookCopy size={16} />
-      <select className={`input ${styles.select}`} value={pick} onChange={(e) => setPick(e.target.value)}>
-        <option value="">Load saved terms…</option>
-        {(list ?? []).map((v) => (
-          <option key={v.id} value={v.id}>
-            {v.name}
-            {v.isDefault ? " (currently using)" : ""}
+    <div className={styles.rbBar}>
+      <div className={styles.rbStatus}>
+        <span className={styles.rbLabel}>Terms · currently using</span>
+        <span className={styles.rbName}>
+          {versions == null ? "…" : match ? match.name : "Custom"}
+          {versions != null && !match && (
+            <span className={styles.editedTag}>{baseOpt ? `Edited from ${baseOpt.name}` : "Not a saved version"}</span>
+          )}
+        </span>
+      </div>
+      <select className={`input ${styles.select}`} value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Terms version">
+        {!match && <option value="custom">Custom</option>}
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+            {o.id === current ? " ✓" : ""}
           </option>
         ))}
-        <option value="__builtin">Original PDF terms</option>
       </select>
-      <Button variant="outline" size="sm" onClick={apply} disabled={!pick}>
-        Load
-      </Button>
+      {pick === current ? (
+        <span className={styles.usingTag}>
+          <Check size={14} /> Currently using
+        </span>
+      ) : (
+        <Button variant="outline" size="sm" onClick={use} disabled={!!busy}>
+          <History size={14} /> Use this version
+        </Button>
+      )}
       <span className={styles.sep} />
-      <Button variant="ghost" size="sm" onClick={() => setSaving(true)}>
-        <Save size={14} /> Save as version
+      {!match && baseOpt && baseOpt.id !== BUILTIN && (
+        <Button size="sm" onClick={update} disabled={!!busy}>
+          <Check size={14} /> {busy === "update" ? "Updating…" : `Update "${baseOpt.name}"`}
+        </Button>
+      )}
+      <Button variant={match ? "ghost" : "outline"} size="sm" onClick={() => setSaving(true)} disabled={!!busy}>
+        <Save size={14} /> Save as new version
       </Button>
       <NameDialog
         open={saving}
-        title="Save terms as a version"
+        title="Save terms as a new version"
         description="Saves these included / not included points, payment schedule and timeline so you can reuse them for other clients."
         onClose={() => setSaving(false)}
         onSave={async (name) => {
           try {
-            await api("saveVersion", { kind: "terms", name, data: value });
+            const res = await api<{ id: number }>("saveVersion", { kind: "terms", name, data: termsOnly(value) });
+            await load();
+            setBase(String(res.id));
             toast.success("Terms version saved", name);
-            await reload();
           } catch (e) {
             toast.error("Couldn't save the version", (e as Error).message);
             throw e;
