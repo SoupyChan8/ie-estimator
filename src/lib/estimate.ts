@@ -108,15 +108,6 @@ function defaultQty(item: CatalogItem, bhk: number, area: number): number {
   return base;
 }
 
-/** What each finish actually charges: a blank Premium / Luxury rate copies the Standard rate. 0 = included. */
-function effectiveRates(item: Pick<CatalogItem, "rateStandard" | "ratePremium" | "rateLuxury">): Record<Tier, number> {
-  return {
-    standard: item.rateStandard,
-    premium: item.ratePremium ?? item.rateStandard,
-    luxury: item.rateLuxury ?? item.rateStandard,
-  };
-}
-
 function rateFor(item: CatalogItem, tier: Tier): number {
   if (tier === "premium" && item.ratePremium != null) return item.ratePremium;
   if (tier === "luxury" && item.rateLuxury != null) return item.rateLuxury;
@@ -204,7 +195,6 @@ export const estimate = {
   baseQty,
   defaultQty,
   rateFor,
-  effectiveRates,
   categoryApplies,
   orderItems,
   childrenOf,

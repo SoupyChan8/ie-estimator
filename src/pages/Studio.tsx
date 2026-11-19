@@ -597,26 +597,9 @@ function RateBookTab() {
                         </div>
                       </td>
                       <td data-label="Unit">{estimate.UNIT_LABEL[i.unit]}</td>
-                      {/* each column shows what that finish really charges; grey = copied from Standard */}
-                      {(
-                        [
-                          ["standard", "Standard ₹", false],
-                          ["premium", "Premium ₹", i.ratePremium == null],
-                          ["luxury", "Luxury ₹", i.rateLuxury == null],
-                        ] as const
-                      ).map(([t, label, inherited]) => {
-                        const r = estimate.effectiveRates(i)[t];
-                        return (
-                          <td
-                            key={t}
-                            className={`${styles.num} ${inherited ? styles.inherited : ""} ${r === 0 ? styles.incl : ""}`}
-                            data-label={label}
-                            title={inherited ? "Same as Standard" : undefined}
-                          >
-                            {r === 0 ? "Incl." : estimate.formatNumber(r)}
-                          </td>
-                        );
-                      })}
+                      <td className={styles.num} data-label="Standard ₹">{i.rateStandard ? estimate.formatNumber(i.rateStandard) : "Incl."}</td>
+                      <td className={styles.num} data-label="Premium ₹">{i.ratePremium == null ? "—" : estimate.formatNumber(i.ratePremium)}</td>
+                      <td className={styles.num} data-label="Luxury ₹">{i.rateLuxury == null ? "—" : estimate.formatNumber(i.rateLuxury)}</td>
                       <td className={styles.num} data-label="1 BHK">{i.scalesWithArea ? (i.qtyBhk1 > 0 ? "Area" : "—") : i.qtyBhk1}</td>
                       <td className={styles.num} data-label="2 BHK">{i.scalesWithArea ? (i.qtyBhk2 > 0 ? "Area" : "—") : i.qtyBhk2}</td>
                       <td className={styles.num} data-label="3 BHK">{i.scalesWithArea ? (i.qtyBhk3 > 0 ? "Area" : "—") : i.qtyBhk3}</td>
@@ -634,7 +617,7 @@ function RateBookTab() {
               </table>
             </div>
             <p className={styles.small}>
-              Tap a row to edit. Each column shows what that finish charges; grey means it copies the Standard rate. “Incl.” = no charge. A
+              Tap a row to edit. A blank Premium or Luxury rate uses the Standard rate. A rate of 0 shows as “Included”. A
               default qty of 0 hides the item for that BHK. You can also edit the rate book directly in the Google Sheet.
             </p>
           </>
@@ -700,9 +683,6 @@ function ItemDialog(props: {
   onClose: () => void;
 }) {
   const { draft, setDraft, categories, items, busy, onSave, onDelete, onClose } = props;
-  // "Included at no charge" switched off: show the rate boxes even while they still read 0
-  const [chargeable, setChargeable] = useState(false);
-  useEffect(() => setChargeable(false), [draft.id]);
   const hasAddons = draft.id != null && items.some((i) => i.parentId === draft.id);
   const parentOptions = estimate.orderItems(
     items.filter((i) => i.categoryId === draft.categoryId && i.parentId == null && i.id !== draft.id),
@@ -846,60 +826,20 @@ function ItemDialog(props: {
         <div className={`${styles.subhead} ${styles.wide}`}>
           Rate per {draft.scalesWithArea ? "carpet sq.ft" : estimate.UNIT_LABEL[draft.unit]} (₹)
         </div>
-        {(() => {
-          const eff = estimate.effectiveRates({
-            rateStandard: num(draft.rateStandard),
-            ratePremium: draft.ratePremium.trim() === "" ? null : num(draft.ratePremium),
-            rateLuxury: draft.rateLuxury.trim() === "" ? null : num(draft.rateLuxury),
-          });
-          const allIncluded = eff.standard === 0 && eff.premium === 0 && eff.luxury === 0 && !chargeable;
-          const freeIn = (["standard", "premium", "luxury"] as const).filter((t) => eff[t] === 0);
-          const mixed = freeIn.length > 0 && freeIn.length < 3;
-          return (
-            <>
-              <div className={`${styles.switchRow} ${styles.wide}`}>
-                <Switch
-                  checked={allIncluded}
-                  onChange={(v) => {
-                    setChargeable(!v);
-                    if (v) setDraft((d) => (d ? { ...d, rateStandard: "0", ratePremium: "", rateLuxury: "" } : d));
-                  }}
-                  label="Included at no charge"
-                />
-                <span>
-                  Included at no charge, all finishes
-                  <small>Shows as “Included” to the client in Standard, Premium and Luxury.</small>
-                </span>
-              </div>
-              {!allIncluded && (
-                <div className={`${styles.triple} ${styles.wide}`}>
-                  <label className={styles.field}>
-                    <span>Standard</span>
-                    <Input {...numTxt("rateStandard")} placeholder="0 = Included" />
-                  </label>
-                  <label className={styles.field}>
-                    <span>Premium</span>
-                    <Input {...numTxt("ratePremium")} placeholder={`Same as Std (${eff.standard === 0 ? "Incl." : estimate.formatNumber(eff.standard)})`} />
-                  </label>
-                  <label className={styles.field}>
-                    <span>Luxury</span>
-                    <Input {...numTxt("rateLuxury")} placeholder={`Same as Std (${eff.standard === 0 ? "Incl." : estimate.formatNumber(eff.standard)})`} />
-                  </label>
-                </div>
-              )}
-              {mixed && (
-                <p className={`${styles.rateWarn} ${styles.wide}`}>
-                  Included in {freeIn.map((t) => estimate.TIERS[t].label).join(" & ")} only. Charged in{" "}
-                  {(["standard", "premium", "luxury"] as const)
-                    .filter((t) => eff[t] !== 0)
-                    .map((t) => `${estimate.TIERS[t].label} (₹${estimate.formatNumber(eff[t])})`)
-                    .join(" & ")}
-                  .
-                </p>
-              )}
-            </>
-          );
-        })()}
+        <div className={`${styles.triple} ${styles.wide}`}>
+          <label className={styles.field}>
+            <span>Standard</span>
+            <Input {...numTxt("rateStandard")} placeholder="0 = Included" />
+          </label>
+          <label className={styles.field}>
+            <span>Premium</span>
+            <Input {...numTxt("ratePremium")} placeholder="Same as Std" />
+          </label>
+          <label className={styles.field}>
+            <span>Luxury</span>
+            <Input {...numTxt("rateLuxury")} placeholder="Same as Std" />
+          </label>
+        </div>
 
         <div className={`${styles.subhead} ${styles.wide}`}>
           {draft.scalesWithArea ? "Included by default for" : "Default quantity by home size"}
