@@ -1191,7 +1191,7 @@ function seedCatalog(raw) {
     [1, 'TV Unit', 'Feature TV wall with back-lit panelling', 'sqft', 950, 1300, 1800, 45, 55, 60, 70, false],
     { under: 'TV Unit', item: [1, 'Puja Unit', 'Puja niche with back-lit jali and drawers', 'sqft', 1200, 1650, 2300, 12, 14, 15, 18, false] },
     { under: 'TV Unit', item: [1, 'Crockery Display', 'Glass-fronted crockery display with profile lights', 'sqft', 1150, 1550, 2150, 15, 18, 20, 22, false] },
-    { under: 'TV Unit', item: [1, 'Hidden Sliding Door', 'Concealed sliding door integrated in the panelling', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false] },
+    { under: 'TV Unit', item: [1, 'Hidden Sliding Door', 'Concealed sliding door integrated in the panelling', 'nos', 0, 0, 0, 1, 1, 1, 1, false] },
     [1, 'Louver Wall Panelling', 'Fluted louvers on the feature / passage wall', 'sqft', 750, 1050, 1500, 30, 38, 43, 52, false],
     [1, 'Partition with Showpiece Sections', 'Open partition with display shelves', 'sqft', 950, 1300, 1850, 25, 32, 38, 45, false],
     [1, 'Sofa', 'Custom sofa', 'nos', 34000, 56000, 100000, 1, 1, 1, 1, false],
@@ -1234,9 +1234,9 @@ function seedCatalog(raw) {
     [9, 'Light Fixtures', 'Spot lights, panels and LED strips', 'sqft', 40, 85, 160, 450, 750, 1100, 1600, true],
     [10, 'Interior Painting', 'Putty, primer and two coats on walls & ceiling', 'sqft', 22, 35, 60, 1350, 2250, 3300, 4800, true],
     [10, 'Texture / Wallpaper Feature Wall', 'Texture paint or wallpaper on a feature wall', 'sqft', 120, 220, 400, 40, 60, 80, 100, false],
-    [11, '3D Design & Visualisation', 'Photo-real 3D views and working drawings', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
-    [11, 'Project Management & Supervision', 'Site supervision through to handover', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
-    [11, 'Site Cleaning & Debris Removal', 'Cleaning and removing debris at handover', 'lumpsum', 0, 0, 0, 1, 1, 1, 1, false],
+    [11, '3D Design & Visualisation', 'Photo-real 3D views and working drawings', 'sqft', 0, 0, 0, 1, 1, 1, 1, true],
+    [11, 'Project Management & Supervision', 'Site supervision through to handover', 'sqft', 0, 0, 0, 1, 1, 1, 1, true],
+    [11, 'Site Cleaning & Debris Removal', 'Cleaning and removing debris at handover', 'sqft', 0, 0, 0, 1, 1, 1, 1, true],
   ];
 
   const lastMain = {}; // `${cat}|${name}` → id

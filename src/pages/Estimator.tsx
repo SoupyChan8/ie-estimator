@@ -611,10 +611,7 @@ function QuantitiesStep(props: {
                   </span>
                   <span className={styles.qtyDesc}>{item.description}</span>
                 </div>
-                {item.unit === "lumpsum" ? (
-                  <span className={styles.qtyIncluded}>1 lot</span>
-                ) : (
-                  <div className={styles.stepper}>
+                <div className={styles.stepper}>
                     <button type="button" onClick={() => setOne(item.id, v - step)} disabled={v <= 1} aria-label="Decrease">
                       <Minus size={16} />
                     </button>
@@ -631,7 +628,6 @@ function QuantitiesStep(props: {
                     </button>
                     <span className={styles.qtyUnit}>{estimate.UNIT_LABEL[item.unit]}</span>
                   </div>
-                )}
                 <button type="button" className={styles.qtyRemove} onClick={() => remove(item)} aria-label="Remove">
                   <X size={16} />
                 </button>
@@ -766,11 +762,9 @@ function EstimateStep(props: {
                       <div key={l.itemId} className={`${styles.bdRow} ${l.parentItemId != null ? styles.bdChild : ""}`}>
                         <span className={styles.bdItem}>{l.parentItemId != null ? `+ ${l.name}` : l.name}</span>
                         <span className={styles.bdCalc}>
-                          {l.unit !== "lumpsum" && (
-                            <span>
-                              {estimate.formatNumber(l.qty)} {estimate.UNIT_LABEL[l.unit]} ×{" "}
-                            </span>
-                          )}
+                          <span>
+                            {estimate.formatNumber(l.qty)} {estimate.UNIT_LABEL[l.unit]} ×{" "}
+                          </span>
                           {isEditing ? (
                             <span className={styles.rateEdit}>
                               ₹
@@ -797,7 +791,7 @@ function EstimateStep(props: {
                             <>
                               {changed && <s className={styles.rateOld}>{estimate.formatINR(l.listRate!)}</s>}
                               <span className={changed ? styles.rateNew : undefined}>
-                                {l.unit === "lumpsum" && l.rate === 0 ? "Included" : estimate.formatINR(l.rate)}
+                                {estimate.formatINR(l.rate)}
                               </span>
                               <button
                                 type="button"

@@ -230,8 +230,8 @@ export const QuotationDocument = forwardRef<HTMLDivElement, Props>(function Quot
                       <td>{r.child ? `+ ${r.line.name}` : r.line.name}</td>
                       <td>{r.line.description}</td>
                       <td>
-                        {r.line.unit === "lumpsum" ? "" : estimate.formatNumber(r.line.qty)}
-                        {r.line.unit !== "lumpsum" && r.line.unit !== "sqft" ? <small> {estimate.UNIT_LABEL[r.line.unit]}</small> : null}
+                        {estimate.formatNumber(r.line.qty)}
+                        {r.line.unit !== "sqft" ? <small> {estimate.UNIT_LABEL[r.line.unit]}</small> : null}
                       </td>
                       <td>{r.line.rate ? estimate.formatNumber(r.line.rate) : ""}</td>
                       <td>{r.line.amount ? estimate.formatNumber(r.line.amount) : "Included"}</td>
