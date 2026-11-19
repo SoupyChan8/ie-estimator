@@ -254,5 +254,15 @@
 .bhkMore { display: inline-flex; align-items: center; gap: 10px; }
 .bhkStep { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid currentColor; opacity: 0.85; cursor: pointer; }
 .bhkStepOff { opacity: 0.3; cursor: default; }
-@media (min-width: 641px) { .bhkGrid { grid-template-columns: repeat(5, 1fr); } }
-@media (max-width: 640px) { .bhkGrid { grid-template-columns: repeat(3, 1fr); } }
+/* minmax(0, 1fr): cards never grow to fit their content, so nothing shifts when the 5+ number changes */
+@media (min-width: 641px) { .bhkGrid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .bhkGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spacing-3); } }
+.bhkCard { min-width: 0; overflow: hidden; }
+.bhkMore .bhkNum { min-width: 2ch; text-align: center; font-size: clamp(2rem, 4.5vw, 3.4rem); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .bhkNum { font-size: 2.6rem; }
+  .bhkMore { gap: 4px; }
+  .bhkMore .bhkNum { font-size: 1.9rem; }
+  .bhkStep { width: 26px; height: 26px; }
+  .bhkStep svg { width: 14px; height: 14px; }
+}
