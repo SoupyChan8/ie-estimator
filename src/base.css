@@ -319,3 +319,4 @@ html { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-select: text; cursor: text; caret-color: auto; }
 button, a, select, summary, label:has(input[type="checkbox"]), [role="button"], [role="switch"], [role="tab"] { cursor: pointer; }
 button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+html.is-grabbing, html.is-grabbing * { cursor: grabbing !important; }

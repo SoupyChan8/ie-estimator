@@ -41,3 +41,11 @@
   .timeRow > :nth-child(4) { grid-column: 3; grid-row: 1; }
   .pointRow { grid-template-columns: 22px 1fr 36px; gap: 6px; }
 }
+
+/* Drag handle: press and drag the six dots to reorder points */
+.handle[data-handle] { display: grid; place-items: center; width: 26px; height: 40px; border-radius: 8px; color: var(--muted-foreground); cursor: grab; touch-action: none; user-select: none; transition: background 0.15s, color 0.15s; }
+.handle:hover, .handle:focus-visible { background: var(--muted); color: var(--foreground); outline: none; }
+.handle[data-handle]:active { cursor: grabbing; }
+.dragging { position: relative; z-index: 3; }
+.dragging .input { box-shadow: 0 10px 24px rgba(43, 33, 26, 0.18); background: var(--card); border-color: var(--oxide); }
+.dragging .handle { background: var(--muted); color: var(--foreground); }
