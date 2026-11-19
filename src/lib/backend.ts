@@ -439,6 +439,7 @@ async function saveContract(p: Record<string, unknown>) {
       itemId: Number(l.itemId), parentItemId: l.parentItemId === null || l.parentItemId === undefined ? null : Number(l.parentItemId),
       categoryName: str(l.categoryName, 200), name: str(l.name, 300), description: str(l.description, 1000),
       unit: (UNITS as readonly string[]).includes(l.unit) ? l.unit : "sqft", qty, rate, amount: Math.round(qty * rate),
+      ...(l.listRate != null && Number(l.listRate) !== rate ? { listRate: Math.max(0, n(l.listRate)) } : {}),
     };
   });
   if (!lines.length) throw new BackendError("No items selected.");

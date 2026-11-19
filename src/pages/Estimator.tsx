@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Minus, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import { Button, Input, Skeleton } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { SignaturePad } from "../components/SignaturePad";
@@ -52,6 +52,8 @@ export default function Estimator() {
   const [committedHome, setCommittedHome] = useState("");
   const [qty, setQty] = useState<Record<number, number>>({});
   const [tier, setTier] = useState<Tier>("premium");
+  // Rates agreed with the client while bargaining, per finish: { premium: { itemId: rate } }
+  const [agreed, setAgreed] = useState<Partial<Record<Tier, Record<number, number>>>>({});
   const [details, setDetails] = useState<ClientDetails>(emptyDetails);
   const [clientSig, setClientSig] = useState<string | null>(null);
   const [designerSig, setDesignerSig] = useState<string | null>(null);
@@ -59,7 +61,17 @@ export default function Estimator() {
   const [saved, setSaved] = useState<{ quotationNo: string; total: number } | null>(null);
 
   const area = Number(areaText) || 0;
-  const lines = useMemo(() => (catalog ? estimate.buildLineItems(catalog, qty, tier) : []), [catalog, qty, tier]);
+  const lines = useMemo(
+    () => (catalog ? estimate.buildLineItems(catalog, qty, tier, agreed[tier]) : []),
+    [catalog, qty, tier, agreed],
+  );
+  const setAgreedRate = (itemId: number, rate: number | null) =>
+    setAgreed((a) => {
+      const forTier = { ...(a[tier] ?? {}) };
+      if (rate === null) delete forTier[itemId];
+      else forTier[itemId] = rate;
+      return { ...a, [tier]: forTier };
+    });
   const total = estimate.total(lines);
   const selectedCount = Object.keys(qty).length;
 
@@ -73,6 +85,7 @@ export default function Estimator() {
     setAreaText("");
     setCommittedHome("");
     setQty({});
+    setAgreed({});
     setTier("premium");
     setDetails(emptyDetails);
     setClientSig(null);
@@ -209,7 +222,16 @@ export default function Estimator() {
             {step === "quantities" && <QuantitiesStep catalog={catalog} qty={qty} setQty={setQty} />}
             {step === "tier" && <TierStep tier={tier} setTier={setTier} />}
             {step === "estimate" && (
-              <EstimateStep catalog={catalog} qty={qty} tier={tier} setTier={setTier} bhk={bhk ?? 0} area={area} />
+              <EstimateStep
+                catalog={catalog}
+                qty={qty}
+                tier={tier}
+                setTier={setTier}
+                bhk={bhk ?? 0}
+                area={area}
+                agreed={agreed[tier] ?? {}}
+                setAgreedRate={setAgreedRate}
+              />
             )}
             {step === "details" && <DetailsStep details={details} setDetails={setDetails} />}
             {step === "contract" && bhk && (
@@ -607,13 +629,36 @@ function TierStep({ tier, setTier }: { tier: Tier; setTier: (t: Tier) => void })
   );
 }
 
-function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; tier: Tier; setTier: (t: Tier) => void; bhk: number; area: number }) {
-  const { catalog, qty, tier, setTier, bhk, area } = props;
+function EstimateStep(props: {
+  catalog: Catalog;
+  qty: Record<number, number>;
+  tier: Tier;
+  setTier: (t: Tier) => void;
+  bhk: number;
+  area: number;
+  agreed: Record<number, number>;
+  setAgreedRate: (itemId: number, rate: number | null) => void;
+}) {
+  const { catalog, qty, tier, setTier, bhk, area, agreed, setAgreedRate } = props;
   const [open, setOpen] = useState<string | null>(null);
-  const lines = estimate.buildLineItems(catalog, qty, tier);
+  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
+  const lines = estimate.buildLineItems(catalog, qty, tier, agreed);
   const groups = estimate.groupByCategory(lines);
   const total = estimate.total(lines);
+  const listTotal = lines.reduce((s, l) => s + Math.round(l.qty * (l.listRate ?? l.rate)), 0);
+  const diff = listTotal - total;
   const shown = useCountUp(total);
+
+  const commit = () => {
+    if (!editing) return;
+    const v = Number(editing.text.replace(/[^\d.]/g, ""));
+    const line = lines.find((l) => l.itemId === editing.id);
+    if (line && editing.text.trim() !== "" && Number.isFinite(v)) {
+      const list = line.listRate ?? line.rate;
+      setAgreedRate(editing.id, Math.round(v * 100) / 100 === list ? null : Math.round(v * 100) / 100);
+    }
+    setEditing(null);
+  };
 
   return (
     <div className={styles.stepWrap}>
@@ -631,6 +676,11 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
         <span className={styles.totalMeta}>
           {bhk} BHK · {estimate.formatNumber(area)} sq.ft · {estimate.TIERS[tier].label} finish
         </span>
+        {diff !== 0 && (
+          <span className={styles.totalAdjust}>
+            <s>{estimate.formatINR(listTotal)}</s> · {diff > 0 ? `Special price, you save ${estimate.formatINR(diff)}` : `Adjusted +${estimate.formatINR(-diff)}`}
+          </span>
+        )}
       </div>
 
       <div className={styles.breakdown}>
@@ -645,15 +695,74 @@ function EstimateStep(props: { catalog: Catalog; qty: Record<number, number>; ti
               </button>
               <div className={`${styles.bdRowsWrap} ${isOpen ? styles.bdRowsOpen : ""}`}>
                 <div className={styles.bdRows}>
-                  {g.lines.map((l) => (
-                    <div key={l.itemId} className={`${styles.bdRow} ${l.parentItemId != null ? styles.bdChild : ""}`}>
-                      <span className={styles.bdItem}>{l.parentItemId != null ? `+ ${l.name}` : l.name}</span>
-                      <span className={styles.bdCalc}>
-                        {l.unit === "lumpsum" ? "" : `${estimate.formatNumber(l.qty)} ${estimate.UNIT_LABEL[l.unit]} × ${estimate.formatINR(l.rate)}`}
-                      </span>
-                      <span className={styles.bdAmt}>{l.amount === 0 ? "Included" : estimate.formatINR(l.amount)}</span>
-                    </div>
-                  ))}
+                  {g.lines.map((l) => {
+                    const changed = l.listRate != null;
+                    const isEditing = editing?.id === l.itemId;
+                    return (
+                      <div key={l.itemId} className={`${styles.bdRow} ${l.parentItemId != null ? styles.bdChild : ""}`}>
+                        <span className={styles.bdItem}>{l.parentItemId != null ? `+ ${l.name}` : l.name}</span>
+                        <span className={styles.bdCalc}>
+                          {l.unit !== "lumpsum" && (
+                            <span>
+                              {estimate.formatNumber(l.qty)} {estimate.UNIT_LABEL[l.unit]} ×{" "}
+                            </span>
+                          )}
+                          {isEditing ? (
+                            <span className={styles.rateEdit}>
+                              ₹
+                              <input
+                                autoFocus
+                                inputMode="decimal"
+                                value={editing.text}
+                                aria-label={`Rate for ${l.name}`}
+                                onChange={(e) => setEditing({ id: l.itemId, text: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") commit();
+                                  if (e.key === "Escape") setEditing(null);
+                                }}
+                                onFocus={(e) => e.target.select()}
+                              />
+                              <button type="button" className={styles.rateBtn} onClick={commit} aria-label="Use this rate">
+                                <Check size={15} />
+                              </button>
+                              <button type="button" className={styles.rateBtn} onClick={() => setEditing(null)} aria-label="Cancel">
+                                <X size={15} />
+                              </button>
+                            </span>
+                          ) : (
+                            <>
+                              {changed && <s className={styles.rateOld}>{estimate.formatINR(l.listRate!)}</s>}
+                              <span className={changed ? styles.rateNew : undefined}>
+                                {l.unit === "lumpsum" && l.rate === 0 ? "Included" : estimate.formatINR(l.rate)}
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.rateBtn}
+                                onClick={() => setEditing({ id: l.itemId, text: String(l.rate) })}
+                                aria-label={`Edit rate for ${l.name}`}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              {changed && (
+                                <button
+                                  type="button"
+                                  className={styles.rateBtn}
+                                  onClick={() => setAgreedRate(l.itemId, null)}
+                                  aria-label={`Back to the standard rate for ${l.name}`}
+                                  title="Back to the rate book rate"
+                                >
+                                  <RotateCcw size={13} />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </span>
+                        <span className={`${styles.bdAmt} ${changed ? styles.rateNew : ""}`}>
+                          {l.amount === 0 ? "Included" : estimate.formatINR(l.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

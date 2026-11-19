@@ -208,3 +208,19 @@
   .contractTotal span:last-child { font-size: 1.5rem; }
   .done { padding-top: var(--spacing-6); }
 }
+
+/* Bargaining: editable rates on the estimate */
+.bdCalc { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.rateBtn { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid transparent; background: transparent; color: var(--muted-foreground); cursor: pointer; transition: background 0.2s, color 0.2s; }
+.rateBtn:hover, .rateBtn:focus-visible { background: var(--muted); color: var(--foreground); }
+.rateEdit { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground); }
+.rateEdit input { width: 96px; padding: 6px 8px; border: 1px solid var(--oxide); border-radius: 8px; background: var(--background); font: inherit; font-size: 0.95rem; color: var(--foreground); text-align: right; font-variant-numeric: tabular-nums; }
+.rateOld { color: var(--muted-foreground); opacity: 0.8; }
+.rateNew { color: var(--oxide); font-weight: 600; }
+.totalAdjust { display: block; margin-top: 10px; font-size: 0.9rem; color: #e5c07b; letter-spacing: 0.02em; }
+.totalAdjust s { opacity: 0.7; }
+@media (max-width: 760px) {
+  .bdRow { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .bdRow .bdCalc { display: inline-flex; grid-column: 1; grid-row: 2; justify-content: flex-start; }
+  .bdRow .bdAmt { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}

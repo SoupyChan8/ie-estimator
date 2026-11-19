@@ -35,6 +35,8 @@ export type LineItem = {
   qty: number;
   rate: number;
   amount: number;
+  /** The rate book rate, kept when the rate was changed while negotiating with the client. */
+  listRate?: number;
 };
 
 export type ContractSummary = {
@@ -135,14 +137,18 @@ function orderItems(items: CatalogItem[], categories?: CatalogCategory[]): Catal
 
 const childrenOf = (items: CatalogItem[], id: number) => items.filter((i) => i.parentId === id);
 
-function buildLineItems(catalog: Catalog, quantities: Record<number, number>, tier: Tier): LineItem[] {
+/** `overrides`: rates agreed with the client, by item id; they replace the rate book rate. */
+function buildLineItems(catalog: Catalog, quantities: Record<number, number>, tier: Tier, overrides?: Record<number, number>): LineItem[] {
   const catName = new Map(catalog.categories.map((c) => [c.id, c.name]));
   return orderItems(catalog.items, catalog.categories)
     .filter((i) => quantities[i.id] != null && quantities[i.id] > 0)
     .map((i) => {
       const qty = quantities[i.id];
-      const rate = rateFor(i, tier);
+      const list = rateFor(i, tier);
+      const custom = overrides?.[i.id];
+      const rate = custom != null && custom !== list ? custom : list;
       return {
+        ...(rate !== list ? { listRate: list } : {}),
         itemId: i.id,
         parentItemId: i.parentId,
         categoryName: catName.get(i.categoryId) ?? "Other",
