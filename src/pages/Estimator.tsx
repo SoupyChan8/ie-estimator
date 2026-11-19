@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { BAR, useStatusBarColor } from "../lib/statusBar";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Minus, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Maximize2, Minimize2, Minus, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { useFullscreen } from "../lib/fullscreen";
 import { Button, Input, Skeleton } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { SignaturePad } from "../components/SignaturePad";
@@ -48,6 +49,7 @@ export default function Estimator() {
     designerName: user?.name ?? "",
   };
   const [step, setStep] = useState<Step>("welcome");
+  const fullscreen = useFullscreen();
   useStatusBarColor(step === "welcome" ? BAR.welcome : BAR.light);
   const [bhk, setBhk] = useState<number | null>(null);
   const [areaText, setAreaText] = useState("");
@@ -166,6 +168,11 @@ export default function Estimator() {
           <div className={styles.welcomeFoot}>
             <span>{brandAssets.contact.website}</span>
             <div className={styles.footLinks}>
+              {fullscreen.supported && (
+                <button className={styles.studioLink} onClick={fullscreen.toggle}>
+                  {fullscreen.active ? <Minimize2 size={12} /> : <Maximize2 size={12} />} {fullscreen.active ? "Exit full screen" : "Full screen"}
+                </button>
+              )}
               <Link to="/studio" className={styles.studioLink}>
                 <Lock size={12} /> Studio
               </Link>
@@ -244,6 +251,17 @@ export default function Estimator() {
               <span style={{ width: `${((flowIndex + 1) / FLOW.length) * 100}%` }} />
             </span>
           </div>
+        )}
+        {fullscreen.supported && (
+          <button
+            type="button"
+            className={styles.fsBtn}
+            onClick={fullscreen.toggle}
+            aria-label={fullscreen.active ? "Exit full screen" : "Full screen"}
+            title={fullscreen.active ? "Exit full screen" : "Full screen"}
+          >
+            {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
         )}
       </header>
 

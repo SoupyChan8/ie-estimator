@@ -245,3 +245,7 @@
 /* crisp text on the iPad */
 .header, .footer { -webkit-font-smoothing: antialiased; }
 .stepActive .stepBtn:disabled { color: inherit; } /* the current step isn't clickable but stays dark */
+.fsBtn { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--foreground); cursor: pointer; transition: background 0.2s; }
+.fsBtn:hover, .fsBtn:focus-visible { background: var(--muted); }
+/* in full screen the page fills the whole display, so give the header room for the iPad's corner radius */
+:global(html:fullscreen) body, :global(html:-webkit-full-screen) body { background: var(--background); }
