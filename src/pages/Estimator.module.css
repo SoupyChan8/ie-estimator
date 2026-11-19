@@ -224,3 +224,14 @@
   .bdRow .bdCalc { display: inline-flex; grid-column: 1; grid-row: 2; justify-content: flex-start; }
   .bdRow .bdAmt { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 }
+
+/* Bargained total: list price struck through above, savings badge beside the price */
+.totalWas { font-family: var(--font-family-display); font-size: clamp(1.4rem, 3vw, 1.9rem); line-height: 1; color: #eae4d8; opacity: 0.55; text-decoration-thickness: 2px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.totalLine { display: flex; align-items: center; gap: var(--spacing-4) var(--spacing-6); flex-wrap: wrap; }
+.saveBadge { display: inline-flex; flex-direction: column; gap: 2px; padding: 10px 18px; border-radius: 14px; background: #e5c07b; color: #2b211a; font-size: 1.2rem; font-weight: 700; line-height: 1.15; animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.saveBadge small { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; }
+.saveBadgeUp { background: rgba(234, 228, 216, 0.14); color: #eae4d8; }
+@media (max-width: 640px) {
+  .saveBadge { font-size: 1.05rem; padding: 8px 14px; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

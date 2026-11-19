@@ -128,3 +128,8 @@
 .bhkToggle { display: flex; align-items: center; gap: 10px; font-weight: 500; padding: 8px 0; }
 .docFields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4); max-width: 560px; }
 @media (max-width: 520px) { .docFields { grid-template-columns: 1fr; } }
+.ccRow { display: flex; gap: var(--spacing-2); align-items: stretch; transition: opacity 0.3s; }
+.ccRow .contractCard { flex: 1; min-width: 0; }
+.ccRowGone { opacity: 0.4; pointer-events: none; }
+.ccDel { flex: none; width: 52px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.ccDel:hover, .ccDel:focus-visible { color: var(--oxide); border-color: var(--oxide); background: #f6e7e2; }

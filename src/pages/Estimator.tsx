@@ -672,15 +672,26 @@ function EstimateStep(props: {
       </div>
       <div className={styles.totalBlock}>
         <span className={styles.totalLabel}>ESTIMATED PROJECT VALUE</span>
-        <span className={styles.totalValue}>{estimate.formatINR(shown)}</span>
+        {diff !== 0 && <s className={styles.totalWas}>{estimate.formatINR(listTotal)}</s>}
+        <div className={styles.totalLine}>
+          <span className={styles.totalValue}>{estimate.formatINR(shown)}</span>
+          {diff !== 0 && (
+            <span className={`${styles.saveBadge} ${diff < 0 ? styles.saveBadgeUp : ""}`}>
+              {diff > 0 ? (
+                <>
+                  <small>Special price</small>You save {estimate.formatINR(diff)}
+                </>
+              ) : (
+                <>
+                  <small>Adjusted</small>+{estimate.formatINR(-diff)}
+                </>
+              )}
+            </span>
+          )}
+        </div>
         <span className={styles.totalMeta}>
           {bhk} BHK · {estimate.formatNumber(area)} sq.ft · {estimate.TIERS[tier].label} finish
         </span>
-        {diff !== 0 && (
-          <span className={styles.totalAdjust}>
-            <s>{estimate.formatINR(listTotal)}</s> · {diff > 0 ? `Special price, you save ${estimate.formatINR(diff)}` : `Adjusted +${estimate.formatINR(-diff)}`}
-          </span>
-        )}
       </div>
 
       <div className={styles.breakdown}>

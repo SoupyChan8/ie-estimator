@@ -113,6 +113,20 @@ function ContractsTab({ onOpen }: { onOpen: (id: number) => void }) {
       .then(setData)
       .catch((e) => setError((e as Error).message));
   }, []);
+  const [deleting, setDeleting] = useState(0);
+  const remove = async (c: ContractSummary) => {
+    if (!window.confirm(`Delete ${c.quotationNo} for ${c.clientName}?\n\nThe signed agreement and its saved PDF are removed. This can't be undone.`)) return;
+    setDeleting(c.id);
+    try {
+      await api("deleteContract", { id: c.id });
+      setData((d) => (d ? d.filter((x) => x.id !== c.id) : d));
+      toast.success(`${c.quotationNo} deleted`);
+    } catch (e) {
+      toast.error("Couldn't delete", (e as Error).message);
+    } finally {
+      setDeleting(0);
+    }
+  };
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (!data)
@@ -133,7 +147,8 @@ function ContractsTab({ onOpen }: { onOpen: (id: number) => void }) {
   return (
     <div className={styles.list}>
       {data.map((c) => (
-        <button key={c.id} className={styles.contractCard} onClick={() => onOpen(c.id)}>
+        <div key={c.id} className={`${styles.ccRow} ${deleting === c.id ? styles.ccRowGone : ""}`}>
+        <button className={styles.contractCard} onClick={() => onOpen(c.id)}>
           <div className={styles.ccMain}>
             <span className={styles.ccNo}>
               {c.quotationNo}
@@ -150,6 +165,16 @@ function ContractsTab({ onOpen }: { onOpen: (id: number) => void }) {
             <span className={styles.ccMeta}>{estimate.formatDate(c.createdAt)}</span>
           </div>
         </button>
+        <button
+          className={styles.ccDel}
+          onClick={() => remove(c)}
+          disabled={!!deleting}
+          aria-label={`Delete ${c.quotationNo} for ${c.clientName}`}
+          title="Delete contract"
+        >
+          <Trash2 size={18} />
+        </button>
+        </div>
       ))}
     </div>
   );
