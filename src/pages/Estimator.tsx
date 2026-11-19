@@ -178,6 +178,34 @@ export default function Estimator() {
   }
 
   const flowIndex = FLOW.findIndex((f) => f.id === step);
+  const homeKey = `${bhk}-${area}`;
+  const homeCommitted = committedHome === homeKey;
+  const stepOk: Partial<Record<Step, boolean>> = {
+    home: !!bhk && area >= 50,
+    scope: selectedCount > 0,
+    quantities: selectedCount > 0,
+    tier: true,
+    estimate: true,
+    details: !!details.clientName.trim(),
+  };
+  /** Back is always allowed; forward only when every step before it is filled in (and the home size is confirmed). */
+  const canJump = (i: number) => {
+    if (i === flowIndex) return false;
+    if (i < flowIndex) return true;
+    for (let k = 0; k < i; k++) if (!stepOk[FLOW[k].id]) return false;
+    // past Scope only once this home size is confirmed (a new or changed size resets the selection)
+    if (i > 1 && !homeCommitted) return false;
+    return true;
+  };
+  const jump = (i: number) => {
+    if (!canJump(i)) return;
+    const target = FLOW[i].id;
+    if (step === "home" && i > 0) {
+      if (committedHome !== homeKey) return commitHome(); // resets the scope if the size changed
+    }
+    if (target === "details") goDetails();
+    else go(target);
+  };
 
   return (
     <main className={styles.app}>
@@ -189,8 +217,17 @@ export default function Estimator() {
           <ol className={styles.steps}>
             {FLOW.map((f, i) => (
               <li key={f.id} className={`${styles.step} ${i === flowIndex ? styles.stepActive : ""} ${i < flowIndex ? styles.stepDone : ""}`}>
-                <b>{String(i + 1).padStart(2, "0")}</b>
-                <span className={styles.stepLabel}>{f.label}</span>
+                <button
+                  type="button"
+                  className={styles.stepBtn}
+                  onClick={() => jump(i)}
+                  disabled={!canJump(i)}
+                  aria-current={i === flowIndex ? "step" : undefined}
+                  aria-label={`Step ${i + 1}: ${f.label}`}
+                >
+                  <b>{String(i + 1).padStart(2, "0")}</b>
+                  <span className={styles.stepLabel}>{f.label}</span>
+                </button>
               </li>
             ))}
           </ol>
@@ -424,17 +461,25 @@ function ScopeStep(props: {
       return next;
     });
 
+  /** Every piece in a room, add-ons included. Pieces with no quantity for this BHK start from the nearest size that has one. */
+  const selectAllIn = (next: Record<number, number>, items: CatalogItem[], mains: CatalogItem[]) => {
+    for (const m of mains) {
+      next[m.id] = estimate.defaultQty(m, bhk, area);
+      for (const k of kids(items, m)) if (k.active) next[k.id] = estimate.defaultQty(k, bhk, area);
+    }
+  };
+
   const toggleCategory = (items: CatalogItem[], mains: CatalogItem[], on: boolean) =>
     setQty((q) => {
       const next = { ...q };
       for (const i of items) delete next[i.id];
-      if (on) for (const m of mains) if (fits(m)) withDefaults(next, items, m);
+      if (on) selectAllIn(next, items, mains);
       return next;
     });
 
   const selectWholeHome = () => {
     const next: Record<number, number> = {};
-    for (const g of groups) for (const m of g.mains) if (fits(m)) withDefaults(next, g.items, m);
+    for (const g of groups) selectAllIn(next, g.items, g.mains);
     setQty(next);
   };
 
@@ -535,7 +580,8 @@ function QuantitiesStep(props: {
     }))
     .filter((g) => g.items.length > 0);
 
-  const setOne = (id: number, v: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.round(v * 100) / 100) }));
+  // a quantity can't go below 1 (to drop a piece, remove it); typing may pass through 0, fixed on leaving the box
+  const setOne = (id: number, v: number, min = 1) => setQty((q) => ({ ...q, [id]: Math.max(min, Math.round(v * 100) / 100) }));
   const remove = (item: CatalogItem) =>
     setQty((q) => {
       const n = { ...q };
@@ -566,13 +612,20 @@ function QuantitiesStep(props: {
                   <span className={styles.qtyDesc}>{item.description}</span>
                 </div>
                 {item.unit === "lumpsum" ? (
-                  <span className={styles.qtyIncluded}>Included</span>
+                  <span className={styles.qtyIncluded}>1 lot</span>
                 ) : (
                   <div className={styles.stepper}>
-                    <button type="button" onClick={() => setOne(item.id, v - step)} aria-label="Decrease">
+                    <button type="button" onClick={() => setOne(item.id, v - step)} disabled={v <= 1} aria-label="Decrease">
                       <Minus size={16} />
                     </button>
-                    <input inputMode="decimal" value={v} onChange={(e) => setOne(item.id, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)} />
+                    <input
+                      inputMode="decimal"
+                      value={v || ""}
+                      onChange={(e) => setOne(item.id, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0, 0)}
+                      onBlur={() => {
+                        if (!(v >= 1)) setOne(item.id, 1);
+                      }}
+                    />
                     <button type="button" onClick={() => setOne(item.id, v + step)} aria-label="Increase">
                       <Plus size={16} />
                     </button>
