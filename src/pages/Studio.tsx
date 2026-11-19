@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BAR, useStatusBarColor } from "../lib/statusBar";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
@@ -18,6 +19,7 @@ type Tab = "contracts" | "rates" | "versions" | "settings";
 
 export default function Studio() {
   const { studioOpen, lockStudio } = useSession();
+  useStatusBarColor(BAR.light);
   const [tab, setTab] = useState<Tab>("contracts");
   const [openContract, setOpenContract] = useState<number | null>(null);
 

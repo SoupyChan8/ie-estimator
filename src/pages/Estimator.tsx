@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { BAR, useStatusBarColor } from "../lib/statusBar";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Minus, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import { Button, Input, Skeleton } from "../components/ui";
@@ -47,6 +48,7 @@ export default function Estimator() {
     designerName: user?.name ?? "",
   };
   const [step, setStep] = useState<Step>("welcome");
+  useStatusBarColor(step === "welcome" ? BAR.welcome : BAR.light);
   const [bhk, setBhk] = useState<number | null>(null);
   const [areaText, setAreaText] = useState("");
   const [committedHome, setCommittedHome] = useState("");

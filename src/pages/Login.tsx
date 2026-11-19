@@ -3,10 +3,12 @@ import { BrandMark } from "../components/BrandMark";
 import { Button, Input } from "../components/ui";
 import { useSession } from "../lib/session";
 import { brandAssets } from "../lib/brandAssets";
+import { BAR, useStatusBarColor } from "../lib/statusBar";
 import styles from "./Login.module.css";
 
 export default function Login() {
   const { login } = useSession();
+  useStatusBarColor(BAR.dark);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

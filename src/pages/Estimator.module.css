@@ -20,7 +20,7 @@
 
 /* Shell */
 .app { min-height: 100dvh; background: var(--background); color: var(--foreground); display: flex; flex-direction: column; }
-.header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-6); padding: var(--spacing-4) clamp(1rem, 4vw, 3rem); padding-top: calc(var(--spacing-4) + env(safe-area-inset-top)); background: rgba(234, 228, 216, 0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+.header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-6); padding: var(--spacing-4) clamp(1rem, 4vw, 3rem); padding-top: calc(var(--spacing-4) + env(safe-area-inset-top)); background: var(--background); border-bottom: 1px solid var(--border); }
 .brandButton { background: none; border: none; padding: 0; cursor: pointer; color: inherit; }
 .steps { display: grid; grid-template-columns: repeat(7, minmax(54px, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; width: min(620px, 62vw); }
 .step { padding-top: 8px; border-top: 2px solid rgba(43, 33, 26, 0.18); color: var(--muted-foreground); font-size: 0.72rem; letter-spacing: 0.04em; transition: border-color 0.3s, color 0.3s; }
@@ -38,7 +38,7 @@
 .lede { margin: 0 0 var(--spacing-8); font-size: 1.08rem; color: var(--muted-foreground); line-height: 1.6; }
 .muted { color: var(--muted-foreground); }
 .fieldLabel { font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted-foreground); margin: var(--spacing-8) 0 var(--spacing-3); }
-.footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: rgba(234, 228, 216, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: var(--spacing-4) clamp(1rem, 5vw, 4rem); padding-bottom: calc(var(--spacing-4) + env(safe-area-inset-bottom)); }
+.footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--background); border-top: 1px solid var(--border); padding: var(--spacing-4) clamp(1rem, 5vw, 4rem); padding-bottom: calc(var(--spacing-4) + env(safe-area-inset-bottom)); }
 .footerInner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-4); }
 .footerMeta { flex: 1; text-align: center; color: var(--muted-foreground); font-size: 0.9rem; }
 
@@ -238,7 +238,10 @@
 
 /* Step bar: each step is a button */
 .stepBtn { all: unset; display: block; width: 100%; cursor: pointer; color: inherit; border-radius: 4px; }
-.stepBtn:disabled { cursor: default; opacity: 0.55; }
+.stepBtn:disabled { cursor: default; color: #a89d8f; } /* solid colour, not transparency: iPad Safari blurs faded text */
 .stepBtn:not(:disabled):hover .stepLabel, .stepBtn:not(:disabled):hover b { color: var(--oxide); }
 .stepBtn:focus-visible { outline: 2px solid var(--oxide); outline-offset: 4px; }
 .stepActive .stepBtn { cursor: default; opacity: 1; }
+/* crisp text on the iPad */
+.header, .footer { -webkit-font-smoothing: antialiased; }
+.stepActive .stepBtn:disabled { color: inherit; } /* the current step isn't clickable but stays dark */
