@@ -713,7 +713,7 @@ function EstimateStep(props: {
                       <div key={l.itemId} className={`${styles.bdRow} ${l.parentItemId != null ? styles.bdChild : ""}`}>
                         <span className={styles.bdItem}>{l.parentItemId != null ? `+ ${l.name}` : l.name}</span>
                         <span className={styles.bdCalc}>
-                          {l.unit !== "lumpsum" && (
+                          {l.unit !== "lumpsum" && l.rate !== 0 && (
                             <span>
                               {estimate.formatNumber(l.qty)} {estimate.UNIT_LABEL[l.unit]} ×{" "}
                             </span>
@@ -744,7 +744,7 @@ function EstimateStep(props: {
                             <>
                               {changed && <s className={styles.rateOld}>{estimate.formatINR(l.listRate!)}</s>}
                               <span className={changed ? styles.rateNew : undefined}>
-                                {l.unit === "lumpsum" && l.rate === 0 ? "Included" : estimate.formatINR(l.rate)}
+                                {l.rate === 0 ? "Included" : estimate.formatINR(l.rate)}
                               </span>
                               <button
                                 type="button"
