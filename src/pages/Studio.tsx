@@ -619,6 +619,9 @@ function RateBookTab() {
                         <div className={styles.itemDesc}>
                           {i.scalesWithArea && <span className={styles.pill}>qty = carpet area</span>}
                           {!i.active && <span className={styles.pill}>hidden</span>}
+                          {i.active && i.parentId == null && ![i.qtyBhk1, i.qtyBhk2, i.qtyBhk3, i.qtyBhk4].some((q) => q > 0) && (
+                            <span className={`${styles.pill} ${styles.pillWarn}`}>not shown: no BHK quantity</span>
+                          )}
                           {i.description}
                         </div>
                       </td>
@@ -885,6 +888,12 @@ function ItemDialog(props: {
             ),
           )}
         </div>
+        {draft.parentId == null && !(["qtyBhk1", "qtyBhk2", "qtyBhk3", "qtyBhk4"] as const).some((k) => num(draft[k]) > 0) && (
+          <p className={`${styles.qtyWarn} ${styles.wide}`}>
+            Clients won't see this item, or its room, until at least one home size has a quantity above 0
+            {draft.scalesWithArea ? " (switch on the sizes it's included for)" : ""}.
+          </p>
+        )}
         <div className={`${styles.switchRow} ${styles.wide}`}>
           <Switch checked={draft.active} onChange={(v) => set("active", v)} label="Show to clients" />
           <span>
