@@ -266,3 +266,26 @@
   .bhkStep { width: 26px; height: 26px; }
   .bhkStep svg { width: 14px; height: 14px; }
 }
+
+/* ───────── drafts ───────── */
+.headerActions { flex: none; display: flex; align-items: center; gap: 8px; }
+.hdrBtn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid var(--border); background: transparent; color: var(--foreground); font: inherit; font-size: 0.88rem; cursor: pointer; white-space: nowrap; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+.hdrBtn:hover, .hdrBtn:focus-visible { background: var(--muted); }
+.hdrBtn:disabled { opacity: 0.6; cursor: default; }
+.hdrBtnDone { color: var(--muted-foreground); }
+/* labels drop to icons when the step bar needs the room */
+@media (max-width: 1100px) { .hdrBtn { width: 40px; padding: 0; justify-content: center; } .hdrLabel { display: none; } }
+
+.resumeCard { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px 22px; max-width: 460px; border: 1px solid rgba(234, 228, 216, 0.28); border-radius: var(--radius-lg, 16px); background: rgba(27, 21, 17, 0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.resumeKicker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.resumeTitle { font-family: var(--font-family-display); font-size: 1.5rem; line-height: 1.2; }
+.resumeMeta { font-size: 0.9rem; opacity: 0.8; }
+.resumeActions { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.resumeFresh { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: inherit; font: inherit; font-size: 0.9rem; opacity: 0.8; cursor: pointer; padding: 8px 4px; text-decoration: underline; text-underline-offset: 3px; }
+.resumeFresh:hover, .resumeFresh:focus-visible { opacity: 1; }
+@media (max-width: 480px) {
+  .headerActions { gap: 6px; }
+  .headerActions .fsBtn { display: none; }
+  .hdrBtn { width: 36px; height: 36px; }
+  .stepMobile > :first-child { white-space: nowrap; }
+}

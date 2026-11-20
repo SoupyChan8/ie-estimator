@@ -9,7 +9,7 @@
  * Then Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
  */
 
-const TABS = { categories: 'Categories', items: 'Items', contracts: 'Contracts', users: 'Users', versions: 'Versions' };
+const TABS = { categories: 'Categories', items: 'Items', contracts: 'Contracts', users: 'Users', versions: 'Versions', drafts: 'Drafts' };
 const COLS = {
   Categories: ['id', 'name', 'sortOrder'],
   // parentId: blank for a main item; the id of another item in the same category for a nested add-on
@@ -23,6 +23,8 @@ const COLS = {
   // Saved versions. kind: "ratebook" (a snapshot of Categories + Items) or "terms" (included / not included,
   // payment schedule, project timeline). Large snapshots are kept as JSON files in Drive (dataFileId).
   Versions: ['id', 'kind', 'name', 'createdAt', 'createdBy', 'updatedAt', 'summary', 'dataJson', 'dataFileId', 'hash'],
+  // Estimate drafts ("Save draft" in the estimator)
+  Drafts: ['id', 'createdAt', 'updatedAt', 'createdBy', 'label', 'clientName', 'bhk', 'carpetArea', 'tier', 'total', 'dataJson'],
 };
 const SESSION_DAYS = 30;
 const STUDIO_MINUTES = 30;
@@ -63,6 +65,10 @@ function doPost(e) {
       case 'logout': deleteSession(req.token); return json({ ok: true });
       case 'catalog': return json(getCatalog());
       case 'saveContract': return json(withLock(() => saveContract(p, session)));
+      case 'listDrafts': return json(listDrafts());
+      case 'getDraft': return json(getDraft(Number(p.id)));
+      case 'saveDraft': return json(withLock(() => saveDraft(p, session)));
+      case 'deleteDraft': return json(withLock(() => deleteDraft(Number(p.id))));
       case 'unlockStudio': return json(unlockStudio(req.token, session, p.password));
     }
 
@@ -523,6 +529,58 @@ function cleanTerms(o) {
 /* ───────────────────────── Versions ───────────────────────── */
 
 /** Creates the Versions tab on sheets set up before versions existed. */
+function draftsSheet() {
+  const book = ss();
+  let sh = book.getSheetByName(TABS.drafts);
+  if (!sh) {
+    sh = book.insertSheet(TABS.drafts);
+    sh.appendRow(COLS.Drafts);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, COLS.Drafts.length).setFontWeight('bold').setBackground('#dcd3c2');
+  }
+  return sh;
+}
+const draftInfo_ = (d, withData) => {
+  const out = { id: Number(d.id), createdAt: String(d.createdAt), updatedAt: String(d.updatedAt), createdBy: String(d.createdBy || ''),
+    label: String(d.label || ''), clientName: String(d.clientName || ''), bhk: d.bhk === '' ? null : Number(d.bhk),
+    carpetArea: num(d.carpetArea), tier: String(d.tier || ''), total: num(d.total) };
+  if (withData) { try { out.data = JSON.parse(d.dataJson || '{}'); } catch (e) { out.data = {}; } }
+  return out;
+};
+function listDrafts() {
+  draftsSheet();
+  return readTable(TABS.drafts).map(d => draftInfo_(d, false)).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+function getDraft(id) {
+  draftsSheet();
+  const d = readTable(TABS.drafts).find(r => Number(r.id) === id);
+  if (!d) throw new Error('That draft no longer exists.');
+  return draftInfo_(d, true);
+}
+function saveDraft(p, session) {
+  const sh = draftsSheet();
+  const now = new Date().toISOString();
+  const row = { label: String(p.label || p.clientName || 'Untitled estimate').slice(0, 120), clientName: String(p.clientName || '').slice(0, 200),
+    bhk: p.bhk == null ? '' : Number(p.bhk), carpetArea: num(p.carpetArea), tier: String(p.tier || ''), total: num(p.total),
+    dataJson: JSON.stringify(p.data || {}), updatedAt: now };
+  if (p.id) {
+    const idx = findRowIndex(TABS.drafts, Number(p.id));
+    if (idx > 0) {
+      const old = readTable(TABS.drafts).find(r => Number(r.id) === Number(p.id));
+      sh.getRange(idx, 1, 1, headersOf(TABS.drafts).length).setValues([rowFor(TABS.drafts, Object.assign({}, old, row))]);
+      return { id: Number(p.id) };
+    }
+  }
+  const id = nextId(TABS.drafts);
+  sh.appendRow(rowFor(TABS.drafts, Object.assign({ id: id, createdAt: now, createdBy: session.email }, row)));
+  return { id: id };
+}
+function deleteDraft(id) {
+  const idx = findRowIndex(TABS.drafts, id);
+  if (idx > 0) sheetOf(TABS.drafts).deleteRow(idx);
+  return { ok: true };
+}
+
 function versionsSheet() {
   const book = ss();
   let sh = book.getSheetByName(TABS.versions);

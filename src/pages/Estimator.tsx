@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BAR, useStatusBarColor } from "../lib/statusBar";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Lock, LogOut, Maximize2, Minimize2, Minus, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, FileClock, FilePlus2, Lock, LogOut, Maximize2, Minimize2, Minus, Pencil, Plus, RotateCcw, Save, X } from "lucide-react";
+import { DraftsList } from "../components/DraftsList";
+import { ago, autosaveUnsaved, clearAutosave, contentKeyOf, rateStamp, readAutosave, takeOpenDraft, writeAutosave, type Autosave, type DraftInfo, type EstimateData } from "../lib/drafts";
 import { useFullscreen } from "../lib/fullscreen";
-import { Button, Input, Skeleton } from "../components/ui";
+import { Button, Input, Modal, Skeleton } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { SignaturePad } from "../components/SignaturePad";
 import { Rise, SplitTitle, useCountUp } from "../components/Motion";
@@ -81,12 +83,127 @@ export default function Estimator() {
   const total = estimate.total(lines);
   const selectedCount = Object.keys(qty).length;
 
+  /* ───────── drafts: auto-save on this iPad + named drafts in the cloud ───────── */
+  const [draftId, setDraftId] = useState<number | null>(null);
+  const [draftKey, setDraftKey] = useState<string | null>(null); // content when last saved as a draft
+  const [draftLabel, setDraftLabel] = useState("");
+  const [resume, setResume] = useState<Autosave | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState<null | { then?: () => void }>(null);
+  const [freshOpen, setFreshOpen] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
+
+  const data: EstimateData = {
+    v: 1, step, bhk, areaText, committedHome, qty, tier, agreed, details, rateStamp: rateStamp(rateBook),
+  };
+  const keyOf = contentKeyOf;
+  const contentKey = keyOf(data);
+  const hasProgress = bhk != null;
+  const draftSaved = draftId != null && draftKey === contentKey;
+
+  // auto-save every change on this iPad (not the signatures)
+  useEffect(() => {
+    if (step === "welcome" || step === "done" || bhk == null) return;
+    const t = window.setTimeout(() => writeAutosave({ ...data, savedAt: Date.now(), draftId, draftKey, total }), 250);
+    return () => window.clearTimeout(t);
+  }, [contentKey, step, draftId, draftKey, total]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // on the welcome screen, offer to continue whatever was left unfinished
+  useEffect(() => {
+    if (step === "welcome") setResume(readAutosave());
+  }, [step]);
+
+  const restore = (d: EstimateData, link: { id: number | null; label?: string } = { id: null }, autoKey?: string | null) => {
+    setBhk(d.bhk);
+    setAreaText(d.areaText ?? "");
+    setCommittedHome(d.committedHome ?? "");
+    setQty(d.qty ?? {});
+    setTier(d.tier ?? "premium");
+    setAgreed(d.agreed ?? {});
+    setDetails({ ...emptyDetails, ...(d.details ?? {}) });
+    setClientSig(null);
+    setDesignerSig(null);
+    setSaved(null);
+    setDraftId(link.id);
+    setDraftLabel(link.label ?? "");
+    setDraftKey(link.id != null ? (autoKey !== undefined ? autoKey : keyOf(d)) : null);
+    setResume(null);
+    if (d.rateStamp && rateBook && d.rateStamp !== rateStamp(rateBook)) {
+      toast("Rates have changed since this was saved", "Prices use today's rate book; your negotiated rates are kept.");
+    }
+    const target = FLOW.some((f) => f.id === d.step) ? (d.step as Step) : "home";
+    go(target);
+  };
+
+  const continueAutosave = () => {
+    if (resume) restore(resume, { id: resume.draftId, label: resume.details?.clientName }, resume.draftKey);
+  };
+
+  const openDraft = async (d: DraftInfo, fromStudio = false) => {
+    const current = resume ?? readAutosave() ?? (hasProgress ? { ...data, draftId, draftKey, savedAt: 0, total } : null);
+    const unsaved = current && current.draftId !== d.id && autosaveUnsaved(current);
+    if (!fromStudio && unsaved && !window.confirm("Replace the estimate in progress? It isn't saved as a draft.")) return;
+    try {
+      const full = await api<DraftInfo>("getDraft", { id: d.id });
+      if (!full.data) throw new Error("This draft is empty.");
+      setDraftsOpen(false);
+      restore(full.data, { id: full.id, label: full.label });
+      toast.success(`Continuing "${full.label}"`);
+    } catch (e) {
+      toast.error("Couldn't open the draft", (e as Error).message);
+    }
+  };
+
+  // a draft handed over from the Studio's Drafts list
+  useEffect(() => {
+    if (!rateBook) return;
+    const id = takeOpenDraft();
+    if (id) void openDraft({ id } as DraftInfo, true);
+  }, [rateBook]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveDraft = async (label: string) => {
+    setDraftBusy(true);
+    try {
+      const res = await api<{ id: number }>("saveDraft", {
+        id: draftId, label, clientName: details.clientName, bhk, carpetArea: area, tier, total, data,
+      });
+      setDraftId(res.id);
+      setDraftLabel(label);
+      setDraftKey(contentKey);
+      toast.success(draftId ? "Draft updated" : "Draft saved", `"${label}" · find it under Drafts`);
+      return true;
+    } catch (e) {
+      toast.error("Couldn't save the draft", (e as Error).message);
+      return false;
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+  const defaultLabel = () =>
+    draftLabel || details.clientName.trim() || [bhk ? `${bhk} BHK` : "", area ? `${estimate.formatNumber(area)} sq.ft` : "", new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
+  const onSaveDraft = (then?: () => void) => {
+    if (draftId != null) void saveDraft(draftLabel || defaultLabel()).then((ok) => ok && then?.());
+    else setNameOpen({ then });
+  };
+
+  // Start fresh: if there's progress that isn't saved as a draft, ask first
+  const startFresh = () => {
+    if (!hasProgress || draftSaved || step === "done") return resetAll();
+    setFreshOpen(true);
+  };
+
   const go = (s: Step) => {
     setStep(s);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const resetAll = () => {
+    clearAutosave();
+    setResume(null);
+    setDraftId(null);
+    setDraftKey(null);
+    setDraftLabel("");
+    setFreshOpen(false);
     setBhk(null);
     setAreaText("");
     setCommittedHome("");
@@ -128,6 +245,11 @@ export default function Estimator() {
         designerSignature: designerSig,
       });
       setSaved({ quotationNo: res.quotationNo, total: res.total });
+      // signed: the estimate is finished, so drop its auto-save and its draft
+      clearAutosave();
+      if (draftId != null) void api("deleteDraft", { id: draftId }).catch(() => undefined);
+      setDraftId(null);
+      setDraftKey(null);
       go("done");
     } catch (e) {
       toast.error("Couldn't save the agreement", (e as Error).message);
@@ -135,6 +257,55 @@ export default function Estimator() {
       setSaving(false);
     }
   };
+
+  const draftModals = (
+    <>
+      <Modal open={draftsOpen} onClose={() => setDraftsOpen(false)} title="Saved drafts" description="Estimates saved part-way. Continue one on any iPad.">
+        <DraftsList onContinue={openDraft} compact />
+      </Modal>
+      <DraftNameModal
+        open={!!nameOpen}
+        initial={defaultLabel()}
+        busy={draftBusy}
+        onClose={() => setNameOpen(null)}
+        onSave={async (label) => {
+          const then = nameOpen?.then;
+          if (await saveDraft(label)) {
+            setNameOpen(null);
+            then?.();
+          }
+        }}
+      />
+      <Modal
+        open={freshOpen}
+        onClose={() => setFreshOpen(false)}
+        title="Start a new estimate?"
+        description={
+          draftId != null
+            ? "Your latest changes to this draft aren't saved yet. Update the draft first to keep them."
+            : "This estimate isn't saved as a draft yet. Save it first to come back to it later."
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setFreshOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={resetAll}>Discard</Button>
+            <Button
+              variant="gold"
+              disabled={draftBusy}
+              onClick={() => {
+                setFreshOpen(false);
+                onSaveDraft(resetAll);
+              }}
+            >
+              <Save size={16} /> {draftId != null ? "Update draft" : "Save draft"} &amp; start fresh
+            </Button>
+          </>
+        }
+      >
+        <span />
+      </Modal>
+    </>
+  );
 
   if (step === "welcome") {
     return (
@@ -157,9 +328,36 @@ export default function Estimator() {
             </p>
             </Rise>
             <Rise delay={1.05}>
-            <Button variant="gold" size="lg" onClick={() => go("home")} disabled={!catalog}>
-              {catalog ? "Begin your estimate" : "Loading rate book…"} <ArrowRight size={18} />
-            </Button>
+            {resume && catalog ? (
+              <div className={styles.resumeCard}>
+                <span className={styles.resumeKicker}>
+                  <FileClock size={14} /> Unfinished estimate · {ago(resume.savedAt)}
+                </span>
+                <span className={styles.resumeTitle}>{resume.details?.clientName?.trim() || "No client name yet"}</span>
+                <span className={styles.resumeMeta}>
+                  {[
+                    resume.bhk ? `${resume.bhk} BHK` : "",
+                    Number(resume.areaText) ? `${estimate.formatNumber(Number(resume.areaText))} sq.ft` : "",
+                    estimate.TIERS[resume.tier]?.label ?? "",
+                    resume.total ? estimate.formatINR(resume.total) : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                <div className={styles.resumeActions}>
+                  <Button variant="gold" size="lg" onClick={continueAutosave}>
+                    Continue <ArrowRight size={18} />
+                  </Button>
+                  <button className={styles.resumeFresh} onClick={startFresh}>
+                    <RotateCcw size={14} /> Start fresh
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="gold" size="lg" onClick={() => go("home")} disabled={!catalog}>
+                {catalog ? "Begin your estimate" : "Loading rate book…"} <ArrowRight size={18} />
+              </Button>
+            )}
             </Rise>
             {catalogError && (
               <p className={styles.welcomeError}>
@@ -175,6 +373,9 @@ export default function Estimator() {
                   {fullscreen.active ? <Minimize2 size={12} /> : <Maximize2 size={12} />} {fullscreen.active ? "Exit full screen" : "Full screen"}
                 </button>
               )}
+              <button className={styles.studioLink} onClick={() => setDraftsOpen(true)}>
+                <FileClock size={12} /> Open drafts
+              </button>
               <Link to="/studio" className={styles.studioLink}>
                 <Lock size={12} /> Studio
               </Link>
@@ -184,6 +385,7 @@ export default function Estimator() {
             </div>
           </div>
         </div>
+        {draftModals}
       </main>
     );
   }
@@ -221,7 +423,7 @@ export default function Estimator() {
   return (
     <main className={styles.app}>
       <header className={styles.header}>
-        <button className={styles.brandButton} onClick={resetAll} aria-label="Start over">
+        <button className={styles.brandButton} onClick={startFresh} aria-label="Start fresh">
           <BrandMark size="sm" />
         </button>
         {step !== "done" && (
@@ -254,6 +456,29 @@ export default function Estimator() {
             </span>
           </div>
         )}
+        <div className={styles.headerActions}>
+        {step !== "done" && (
+          <>
+            <button
+              type="button"
+              className={`${styles.hdrBtn} ${draftSaved ? styles.hdrBtnDone : ""}`}
+              onClick={() => onSaveDraft()}
+              disabled={draftBusy}
+              title={draftSaved ? "Saved as a draft" : draftId ? "Update the draft" : "Save as a draft"}
+            >
+              {draftSaved ? <Check size={16} /> : <Save size={16} />}
+              <span className={styles.hdrLabel}>{draftBusy ? "Saving…" : draftSaved ? "Saved" : draftId ? "Update draft" : "Save draft"}</span>
+            </button>
+            <button type="button" className={styles.hdrBtn} onClick={() => setDraftsOpen(true)} title="Open a saved draft">
+              <FileClock size={16} />
+              <span className={styles.hdrLabel}>Open drafts</span>
+            </button>
+            <button type="button" className={styles.hdrBtn} onClick={startFresh} title="Start a new estimate">
+              <FilePlus2 size={16} />
+              <span className={styles.hdrLabel}>Start fresh</span>
+            </button>
+          </>
+        )}
         {fullscreen.supported && (
           <button
             type="button"
@@ -265,6 +490,7 @@ export default function Estimator() {
             {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
         )}
+        </div>
       </header>
 
       <section className={styles.body}>
@@ -372,7 +598,44 @@ export default function Estimator() {
           </div>
         </footer>
       )}
+      {draftModals}
     </main>
+  );
+}
+
+/* ───────────────────────── Drafts ───────────────────────── */
+
+function DraftNameModal(props: { open: boolean; initial: string; busy: boolean; onClose: () => void; onSave: (label: string) => void }) {
+  const { open, initial, busy, onClose, onSave } = props;
+  const [label, setLabel] = useState(initial);
+  useEffect(() => {
+    if (open) setLabel(initial);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ok = label.trim().length > 0;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Save as a draft"
+      description="Give it a name you'll recognise. It's saved to the cloud, so any iPad can continue it."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="gold" disabled={!ok || busy} onClick={() => onSave(label.trim())}>
+            <Save size={16} /> {busy ? "Saving…" : "Save draft"}
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ok && !busy) onSave(label.trim());
+        }}
+      >
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Mr Sharma, Salt Lake" autoFocus aria-label="Draft name" />
+      </form>
+    </Modal>
   );
 }
 

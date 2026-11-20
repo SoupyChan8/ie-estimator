@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BAR, useStatusBarColor } from "../lib/statusBar";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { DraftsList } from "../components/DraftsList";
+import { autosaveUnsaved, readAutosave, requestOpenDraft } from "../lib/drafts";
 import { ArrowLeft, ArrowRight, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
@@ -15,7 +17,7 @@ import { blobToBase64, renderPdf, shareOrDownload } from "../lib/quotationPdf";
 import { toast } from "../lib/toast";
 import styles from "./Studio.module.css";
 
-type Tab = "contracts" | "rates" | "versions" | "settings";
+type Tab = "contracts" | "drafts" | "rates" | "versions" | "settings";
 
 export default function Studio() {
   const { studioOpen, lockStudio } = useSession();
@@ -50,6 +52,7 @@ export default function Studio() {
               {(
                 [
                   ["contracts", "Contracts"],
+                  ["drafts", "Drafts"],
                   ["rates", "Rate book"],
                   ["versions", "Saved versions"],
                   ["settings", "Settings"],
@@ -61,6 +64,7 @@ export default function Studio() {
               ))}
             </nav>
             {tab === "contracts" && <ContractsTab onOpen={setOpenContract} />}
+            {tab === "drafts" && <DraftsTab />}
             {tab === "rates" && <RateBookTab />}
             {tab === "versions" && <VersionsTab />}
             {tab === "settings" && <SettingsTab />}
@@ -102,6 +106,26 @@ function StudioGate() {
       </Button>
       <p className={styles.small}>The studio locks itself after 30 minutes.</p>
     </form>
+  );
+}
+
+function DraftsTab() {
+  const navigate = useNavigate();
+  return (
+    <section>
+      <p style={{ color: "var(--muted-foreground)", margin: "0 0 16px" }}>
+        Estimates saved part-way from the estimator. Continue opens it on this iPad with today's rate book; negotiated rates are kept. A draft is removed once its agreement is signed.
+      </p>
+      <DraftsList
+        onContinue={(d) => {
+          const a = readAutosave();
+          const unsaved = a && a.draftId !== d.id && autosaveUnsaved(a);
+          if (unsaved && !window.confirm("There's an unfinished estimate on this iPad that isn't saved as a draft. Replace it?")) return;
+          requestOpenDraft(d.id);
+          navigate("/");
+        }}
+      />
+    </section>
   );
 }
 

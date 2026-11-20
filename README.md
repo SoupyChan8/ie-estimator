@@ -19,10 +19,19 @@ Live: **https://soupychan8.github.io/ie-estimator/**
 5. **Estimate**: the total and a room-by-room breakdown. Tap ✏️ next to any rate to change it while negotiating. The old total is shown struck through, with a "You save ₹…" badge, and ↺ restores the rate book rate.
 6. **Details** and **Agreement**: client details, then both signatures. Saving stores the contract with the agreed rates; the rate book rate is kept alongside each changed line for reference.
 
+### Drafts
+
+- **Auto-save**: every change is kept on that iPad (not the signatures). If the app closes by accident, the welcome screen shows **Unfinished estimate** with **Continue** or **Start fresh**.
+- **Save draft** (top bar) saves the estimate to the cloud under a name, so any iPad can continue it. Once saved, the same button reads **Saved** or **Update draft**. Save as many drafts as you like.
+- **Open drafts** (top bar, welcome screen, and Studio → Drafts) lists every draft with **Continue** and 🗑 delete.
+- **Start fresh** (top bar, or tap the logo) clears the estimate. If there are unsaved changes it offers to save the draft first.
+- A reopened draft uses today's rate book but keeps any negotiated rates, and says so if the rates changed since it was saved. A draft is deleted automatically once its agreement is signed.
+
 ## The Studio
 
 Open it from the estimator (lock icon). It asks for the password again and locks itself after 30 minutes.
 
+- **Drafts**: estimates saved part-way. **Continue** opens one in the estimator; 🗑 deletes it.
 - **Contracts**: every signed agreement, each with a 🗑 delete button. Opening one gives:
   - **Quotation details**:
     - The quotation number. Changing it renames the contract, and duplicate numbers are refused.
@@ -41,7 +50,7 @@ Open it from the estimator (lock icon). It asks for the password again and locks
 ### 1. Supabase
 
 1. Create a project at supabase.com. Region: **South Asia (Mumbai)**. Keep *Enable Data API* on. Leave the two automatic grant/RLS options unticked; the script handles them.
-2. In **SQL Editor**, run `supabase/schema.sql`. It creates the tables, security rules, quotation numbering (IE-YYYY-154 onwards) and the `quotations` bucket. It is safe to run again.
+2. In **SQL Editor**, run `supabase/schema.sql`. It creates the tables, security rules, quotation numbering (IE-YYYY-154 onwards) and the `quotations` bucket. It is safe to run again. The dated files in `supabase/` are smaller updates for a database set up earlier; `schema.sql` already includes them.
 3. Under **Authentication → Users → Add user**, create each person with email, password and *Auto Confirm User* ticked.
 4. Under **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up".
 5. Under **Project Settings → API Keys**, copy the Project URL and the **publishable** key.

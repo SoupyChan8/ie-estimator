@@ -532,6 +532,53 @@ async function deleteContract(p: { id: number }) {
   return { ok: true };
 }
 
+/* ───────────── drafts ───────────── */
+
+type DraftRow = {
+  id: number; created_at: string; updated_at: string; created_by: string; label: string; client_name: string;
+  bhk: number | null; carpet_area: number; tier: string; total: number; data?: unknown;
+};
+const toDraftInfo = (d: DraftRow) => ({
+  id: Number(d.id), createdAt: d.created_at, updatedAt: d.updated_at, createdBy: d.created_by ?? "", label: d.label ?? "",
+  clientName: d.client_name ?? "", bhk: d.bhk == null ? null : Number(d.bhk), carpetArea: n(d.carpet_area), tier: d.tier ?? "",
+  total: n(d.total), ...(d.data !== undefined ? { data: d.data } : {}),
+});
+
+async function listDrafts() {
+  const rows = check(
+    await sb().from("drafts").select("id, created_at, updated_at, created_by, label, client_name, bhk, carpet_area, tier, total").order("updated_at", { ascending: false }),
+  ) as DraftRow[];
+  return rows.map(toDraftInfo);
+}
+
+async function getDraft(p: { id: number }) {
+  const d = check(await sb().from("drafts").select("*").eq("id", p.id).maybeSingle()) as DraftRow | null;
+  if (!d) throw new BackendError("That draft no longer exists.");
+  return toDraftInfo(d);
+}
+
+async function saveDraft(p: { id?: number | null; label?: string; clientName?: string; bhk?: number | null; carpetArea?: number; tier?: string; total?: number; data: unknown }) {
+  const user = await currentUser();
+  if (!p.data || typeof p.data !== "object") throw new BackendError("Nothing to save.");
+  const row = {
+    label: str(p.label, 120) || str(p.clientName, 120) || "Untitled estimate",
+    client_name: str(p.clientName, 200), bhk: p.bhk == null ? null : Number(p.bhk), carpet_area: n(p.carpetArea),
+    tier: str(p.tier, 20), total: n(p.total), data: p.data, updated_at: new Date().toISOString(),
+  };
+  if (p.id) {
+    const res = check(await sb().from("drafts").update(row).eq("id", p.id).select("id"));
+    if (res.length) return { id: Number(p.id) };
+    // it was deleted meanwhile (e.g. from another iPad): save it as a new one
+  }
+  const created = check(await sb().from("drafts").insert({ ...row, created_by: (await displayName(user.email ?? "")) || user.email || "" }).select("id").single());
+  return { id: Number(created.id) };
+}
+
+async function deleteDraft(p: { id: number }) {
+  check(await sb().from("drafts").delete().eq("id", p.id));
+  return { ok: true };
+}
+
 /* ───────────── dispatcher ───────────── */
 
 async function rateBookState() {
@@ -556,6 +603,7 @@ const ACTIONS: Record<string, (p: any) => Promise<unknown>> = {
   saveVersion: withState(saveVersion), deleteVersion: withState(deleteVersion),
   restoreRateBook: withState(restoreRateBook), setDefaultTerms,
   saveContract, listContracts, getContract, saveContractOptions, savePdf, deleteContract,
+  listDrafts, getDraft, saveDraft, deleteDraft,
 };
 
 export async function callSupabase(action: string, payload: unknown): Promise<unknown> {
