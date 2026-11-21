@@ -3,7 +3,9 @@ import { BAR, useStatusBarColor } from "../lib/statusBar";
 import { Link, useNavigate } from "react-router-dom";
 import { DraftsList } from "../components/DraftsList";
 import { autosaveUnsaved, readAutosave, requestOpenDraft } from "../lib/drafts";
-import { ArrowLeft, ArrowRight, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, CloudUpload, Download, ExternalLink, FileText, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { RestoreBar } from "../components/RestoreBar";
+import { useDeviceDraft } from "../lib/deviceDraft";
 import { Button, Input, Modal, Skeleton, Switch } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
 import { QuotationDocument } from "../components/QuotationDocument";
@@ -12,7 +14,7 @@ import { RateBookVersionBar, TermsVersionBar, VersionsTab } from "../components/
 import { DEFAULT_VALIDITY, withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { useSession } from "../lib/session";
 import { api } from "../lib/api";
-import { estimate, type CatalogItem, type ContractFull, type ContractSummary, type RateUnit } from "../lib/estimate";
+import { estimate, type Catalog, type CatalogItem, type ContractFull, type ContractSummary, type RateUnit } from "../lib/estimate";
 import { blobToBase64, renderPdf, shareOrDownload } from "../lib/quotationPdf";
 import { toast } from "../lib/toast";
 import styles from "./Studio.module.css";
@@ -214,6 +216,9 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
   const [opts, setOpts] = useState<QuotationOptions | null>(null);
   const [savedOpts, setSavedOpts] = useState("");
   const dirty = opts != null && JSON.stringify(opts) !== savedOpts;
+  // unsaved quotation details are kept on this device until saved
+  const kept = useDeviceDraft<QuotationOptions | null>(`contract-${id}`, opts, dirty);
+  const showKept = !!(kept.pending?.value && opts && JSON.stringify(kept.pending.value) !== JSON.stringify(opts));
   const [driveUrl, setDriveUrl] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -335,6 +340,17 @@ function ContractView({ id, onBack }: { id: number; onBack: () => void }) {
       {!data && !error && <Skeleton style={{ height: 600 }} />}
       {data && opts && (
         <>
+          {showKept && kept.pending && (
+            <RestoreBar
+              text="Unsaved changes to this quotation's details"
+              at={kept.pending.at}
+              onRestore={() => {
+                const v = kept.restore();
+                if (v) setOpts(v);
+              }}
+              onDiscard={kept.discard}
+            />
+          )}
           <div className={styles.viewHead}>
             <div>
               <div className={styles.ccNo}>{data.quotationNo}</div>
@@ -483,9 +499,62 @@ const blankDraft = (categoryId: number, parentId: number | null = null): ItemDra
 const num = (s: string) => Number(s.replace(/[^0-9.]/g, "")) || 0;
 
 function RateBookTab() {
-  const { catalog } = useSession();
+  const { catalog: saved } = useSession();
   const [catId, setCatId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ItemDraft | null>(null);
+  const [draftOrig, setDraftOrig] = useState("");
+  const openItem = (d: ItemDraft) => {
+    setDraft(d);
+    setDraftOrig(JSON.stringify(d));
+  };
+
+  // an item being added or edited is kept on this device until it's saved or cancelled
+  const itemDirty = draft != null && JSON.stringify(draft) !== draftOrig;
+  const kept = useDeviceDraft<ItemDraft | null>("rate-book-item", draft, itemDirty, draft?.name ?? "");
+  const restoreItem = () => {
+    const v = kept.restore();
+    if (!v || !saved) return;
+    const stillThere = v.id == null || saved.items.some((i) => i.id === v.id);
+    const d = stillThere ? v : { ...v, id: undefined };
+    if (saved.categories.some((c) => c.id === d.categoryId)) setCatId(d.categoryId);
+    setDraft(d);
+    setDraftOrig("");
+  };
+
+  // moving categories and items: shown at once, saved in order in the background
+  const [optimistic, setOptimistic] = useState<Catalog | null>(null);
+  const moveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const moving = useRef(0);
+  const catalog = optimistic ?? saved;
+  const reorder = (kind: "categories" | "items", ids: number[]) => {
+    if (!catalog) return;
+    const pos = new Map(ids.map((id, i) => [id, i + 1]));
+    const next: Catalog =
+      kind === "categories"
+        ? {
+            ...catalog,
+            categories: catalog.categories
+              .map((c) => ({ ...c, sortOrder: pos.get(c.id) ?? c.sortOrder }))
+              .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id),
+          }
+        : { ...catalog, items: catalog.items.map((i) => (pos.has(i.id) ? { ...i, sortOrder: pos.get(i.id)! } : i)) };
+    setOptimistic(next);
+    moving.current++;
+    moveQueue.current = moveQueue.current
+      .then(() => api("reorder", { kind, ids }))
+      .catch((e) => toast.error("Couldn't save the new order", (e as Error).message))
+      .finally(() => {
+        if (--moving.current === 0) setOptimistic(null);
+      });
+  };
+  const moveIn = (kind: "categories" | "items", order: number[], id: number, dir: -1 | 1) => {
+    const at = order.indexOf(id);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= order.length) return;
+    const ids = [...order];
+    [ids[at], ids[to]] = [ids[to], ids[at]];
+    reorder(kind, ids);
+  };
   const [catDialog, setCatDialog] = useState<{ id?: number; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -513,6 +582,8 @@ function RateBookTab() {
 
   if (!catalog) return <Skeleton style={{ height: 400 }} />;
   const items = activeCat ? estimate.orderItems(catalog.items.filter((i) => i.categoryId === activeCat.id)) : [];
+  const siblingsOf = (i: CatalogItem) => items.filter((x) => (x.parentId ?? null) === (i.parentId ?? null)).map((x) => x.id);
+  const catOrder = catalog.categories.map((c) => c.id);
 
   const submitCat = async () => {
     if (!catDialog?.name.trim()) return;
@@ -539,14 +610,46 @@ function RateBookTab() {
   return (
     <>
     <RateBookVersionBar />
+    {kept.pending?.value && (
+      <RestoreBar
+        text={kept.pending.value.id ? `Changes to “${kept.pending.label || "an item"}”` : `New item “${kept.pending.label || "untitled"}”`}
+        at={kept.pending.at}
+        onRestore={restoreItem}
+        onDiscard={kept.discard}
+      />
+    )}
     <div className={styles.rates}>
       <aside className={styles.cats}>
         <div className={styles.catsHead}>Categories</div>
-        {catalog.categories.map((c) => (
-          <button key={c.id} className={`${styles.catBtn} ${activeCat?.id === c.id ? styles.catOn : ""}`} onClick={() => setCatId(c.id)}>
-            <span>{c.name}</span>
-            <small>{catalog.items.filter((i) => i.categoryId === c.id).length}</small>
-          </button>
+        {catalog.categories.map((c, idx) => (
+          <div key={c.id} className={`${styles.catRow} ${activeCat?.id === c.id ? styles.catOn : ""}`}>
+            <button className={styles.catBtn} onClick={() => setCatId(c.id)}>
+              <span>{c.name}</span>
+              <small>{catalog.items.filter((i) => i.categoryId === c.id).length}</small>
+            </button>
+            {activeCat?.id === c.id && catOrder.length > 1 && (
+              <span className={styles.move}>
+                <button
+                  className={styles.moveBtn}
+                  disabled={idx === 0}
+                  onClick={() => moveIn("categories", catOrder, c.id, -1)}
+                  aria-label={`Move ${c.name} up`}
+                  title="Move up"
+                >
+                  <ChevronUp size={16} />
+                </button>
+                <button
+                  className={styles.moveBtn}
+                  disabled={idx === catOrder.length - 1}
+                  onClick={() => moveIn("categories", catOrder, c.id, 1)}
+                  aria-label={`Move ${c.name} down`}
+                  title="Move down"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </span>
+            )}
+          </div>
         ))}
         <Button variant="outline" onClick={() => setCatDialog({ name: "" })} className={styles.addCat}>
           <Plus size={16} /> Add category
@@ -565,7 +668,7 @@ function RateBookTab() {
                 <Button variant="ghost" size="sm" onClick={removeCat} disabled={busy}>
                   <Trash2 size={14} /> Delete
                 </Button>
-                <Button onClick={() => setDraft(blankDraft(activeCat.id))}>
+                <Button onClick={() => openItem(blankDraft(activeCat.id))}>
                   <Plus size={16} /> Add item
                 </Button>
               </div>
@@ -597,10 +700,12 @@ function RateBookTab() {
                   {items.map((i) => (
                     <tr
                       key={i.id}
-                      onClick={() => setDraft(toDraft(i))}
+                      onClick={() => openItem(toDraft(i))}
                       className={`${!i.active ? styles.inactive : ""} ${i.parentId != null ? styles.childRow : ""}`}
                     >
                       <td>
+                        <div className={styles.itemCell}>
+                        <div className={styles.itemMain}>
                         <div className={styles.itemName}>
                           {i.parentId != null && <span className={styles.addonMark}>Add-on</span>}
                           {i.name}
@@ -609,7 +714,7 @@ function RateBookTab() {
                               className={styles.addAddon}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setDraft(blankDraft(i.categoryId, i.id));
+                                openItem(blankDraft(i.categoryId, i.id));
                               }}
                             >
                               <Plus size={12} /> Add-on
@@ -623,6 +728,35 @@ function RateBookTab() {
                             <span className={`${styles.pill} ${styles.pillWarn}`}>not shown: no BHK quantity</span>
                           )}
                           {i.description}
+                        </div>
+                        </div>
+                        {(() => {
+                          const sib = siblingsOf(i);
+                          const at = sib.indexOf(i.id);
+                          if (sib.length < 2) return null;
+                          return (
+                            <span className={styles.move} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className={styles.moveBtn}
+                                disabled={at === 0}
+                                onClick={() => moveIn("items", sib, i.id, -1)}
+                                aria-label={`Move ${i.name} up`}
+                                title="Move up"
+                              >
+                                <ChevronUp size={16} />
+                              </button>
+                              <button
+                                className={styles.moveBtn}
+                                disabled={at === sib.length - 1}
+                                onClick={() => moveIn("items", sib, i.id, 1)}
+                                aria-label={`Move ${i.name} down`}
+                                title="Move down"
+                              >
+                                <ChevronDown size={16} />
+                              </button>
+                            </span>
+                          );
+                        })()}
                         </div>
                       </td>
                       <td data-label="Unit">{estimate.UNIT_LABEL[i.unit]}</td>
@@ -646,8 +780,8 @@ function RateBookTab() {
               </table>
             </div>
             <p className={styles.small}>
-              Tap a row to edit. A blank Premium or Luxury rate uses the Standard rate. A rate of 0 shows as “Included”. A
-              default qty of 0 hides the item for that BHK. You can also edit the rate book directly in the Google Sheet.
+              Tap a row to edit. Use the arrows to change the order clients see; add-ons move within their main item. A blank Premium or Luxury rate uses the Standard rate. A rate of 0 shows as “Included”. A
+              default qty of 0 hides the item for that BHK.
             </p>
           </>
         ) : (

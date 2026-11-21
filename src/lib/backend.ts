@@ -218,6 +218,16 @@ async function deleteItem(p: { id: number }) {
   return { ok: true };
 }
 
+/** Puts categories, or items that sit side by side (main items in a category, or add-ons under one item), in the given order. */
+async function reorder(p: { kind: "categories" | "items"; ids: number[] }) {
+  const table = p.kind === "categories" ? "categories" : "items";
+  const ids = (Array.isArray(p.ids) ? p.ids : []).map(Number).filter((x) => x > 0);
+  if (!ids.length) throw new BackendError("Nothing to reorder.");
+  const results = await Promise.all(ids.map((id, i) => sb().from(table).update({ sort_order: i + 1 }).eq("id", id)));
+  results.forEach((r) => check(r));
+  return { ok: true };
+}
+
 /* ───────────── versions ───────────── */
 
 type VersionRow = {
@@ -598,7 +608,7 @@ const ACTIONS: Record<string, (p: any) => Promise<unknown>> = {
   login, me, logout, unlockStudio, changePassword,
   catalog, rateBookState,
   saveCategory: withState(saveCategory), deleteCategory: withState(deleteCategory),
-  saveItem: withState(saveItem), deleteItem: withState(deleteItem),
+  saveItem: withState(saveItem), deleteItem: withState(deleteItem), reorder: withState(reorder),
   listVersions: (p) => listVersions(p ?? {}), getVersion,
   saveVersion: withState(saveVersion), deleteVersion: withState(deleteVersion),
   restoreRateBook: withState(restoreRateBook), setDefaultTerms,

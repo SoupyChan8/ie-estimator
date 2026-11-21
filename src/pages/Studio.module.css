@@ -38,7 +38,9 @@
 .rates { display: grid; grid-template-columns: 230px 1fr; gap: var(--spacing-6); align-items: start; }
 .cats { display: flex; flex-direction: column; gap: 2px; position: sticky; top: var(--spacing-4); }
 .catsHead { font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-foreground); padding: 0 var(--spacing-3) var(--spacing-2); }
-.catBtn { display: flex; justify-content: space-between; align-items: center; padding: 12px var(--spacing-3); border: none; border-radius: var(--radius); background: transparent; color: inherit; font-weight: 500; font-size: 0.95rem; text-align: left; cursor: pointer; }
+.catRow { display: flex; align-items: center; border-radius: var(--radius); }
+.catBtn { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px var(--spacing-3); border: none; border-radius: var(--radius); background: transparent; color: inherit; font-weight: 500; font-size: 0.95rem; text-align: left; cursor: pointer; }
+.catOn .moveBtn { color: var(--background); border-color: rgba(234, 228, 216, 0.3); }
 .catBtn small { color: var(--muted-foreground); margin-left: 6px; }
 .catOn { background: var(--foreground); color: var(--background); }
 .catOn small { color: var(--accent); }
@@ -135,3 +137,12 @@
 .ccDel:hover, .ccDel:focus-visible { color: var(--oxide); border-color: var(--oxide); background: #f6e7e2; }
 .pillWarn { background: #f6e7e2; color: var(--oxide); font-weight: 600; }
 .qtyWarn { margin: 0; padding: 10px 12px; border-radius: var(--radius-md); background: #f6e7e2; color: var(--oxide); font-size: 0.85rem; line-height: 1.45; }
+
+/* ───────── reorder arrows ───────── */
+.move { display: inline-flex; gap: 4px; flex: none; padding-right: 6px; }
+.moveBtn { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--foreground); cursor: pointer; }
+.moveBtn:hover:not(:disabled), .moveBtn:focus-visible { border-color: var(--oxide); color: var(--oxide); }
+.moveBtn:disabled { opacity: 0.25; cursor: default; }
+.itemCell { display: flex; align-items: flex-start; gap: 10px; }
+.itemMain { flex: 1; min-width: 0; }
+.itemCell .move { padding-right: 0; }

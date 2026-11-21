@@ -15,7 +15,7 @@
 .welcomeError { font-size: 0.9rem; color: #e8c39a; }
 .welcomeError button { background: none; border: none; color: inherit; text-decoration: underline; cursor: pointer; }
 .welcomeFoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 0.85rem; letter-spacing: 0.08em; opacity: 0.75; }
-.footLinks { display: flex; gap: 8px; }
+.footLinks { display: flex; flex-wrap: wrap; gap: 8px; }
 .studioLink { display: inline-flex; align-items: center; gap: 6px; color: inherit; background: none; text-decoration: none; padding: 8px 12px; border: 1px solid rgba(234, 228, 216, 0.25); border-radius: var(--radius-full); font-size: 0.85rem; letter-spacing: 0.08em; cursor: pointer; }
 
 /* Shell */

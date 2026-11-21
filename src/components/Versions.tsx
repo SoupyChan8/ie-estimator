@@ -7,6 +7,8 @@ import { api, onRateBookState } from "../lib/api";
 import { estimate, type VersionInfo, type VersionKind } from "../lib/estimate";
 import { DEFAULT_OPTIONS, withDefaults, type QuotationOptions } from "../lib/quotationOptions";
 import { toast } from "../lib/toast";
+import { useDeviceDraft } from "../lib/deviceDraft";
+import { RestoreBar } from "./RestoreBar";
 import styles from "./Versions.module.css";
 
 type VersionFull = VersionInfo & { data: unknown };
@@ -449,19 +451,29 @@ function RateBookVersions() {
   );
 }
 
+type TermsEdit = { id?: number; name: string; data: QuotationOptions };
+
 function TermsVersions() {
   const { list, error, reload } = useVersions("terms");
-  const [editing, setEditing] = useState<{ id?: number; name: string; data: QuotationOptions } | null>(null);
+  const [editing, setEditingState] = useState<TermsEdit | null>(null);
+  const [editingOrig, setEditingOrig] = useState("");
+  const setEditing = setEditingState;
+  const startEditing = (e: TermsEdit) => {
+    setEditingState(e);
+    setEditingOrig(JSON.stringify(e));
+  };
   const [busy, setBusy] = useState(false);
+  // an unsaved terms edit is kept on this device until it's saved or cancelled
+  const kept = useDeviceDraft<TermsEdit | null>("terms-version", editing, editing != null && JSON.stringify(editing) !== editingOrig, editing?.name ?? "");
 
   const open = async (v?: VersionInfo) => {
     if (!v) {
-      setEditing({ name: "", data: DEFAULT_OPTIONS });
+      startEditing({ name: "", data: DEFAULT_OPTIONS });
       return;
     }
     try {
       const full = await api<VersionFull>("getVersion", { id: v.id });
-      setEditing({ id: v.id, name: full.name, data: withDefaults(full.data as QuotationOptions) });
+      startEditing({ id: v.id, name: full.name, data: withDefaults(full.data as QuotationOptions) });
     } catch (e) {
       toast.error("Couldn't open that version", (e as Error).message);
     }
@@ -508,6 +520,20 @@ function TermsVersions() {
           <Plus size={14} /> New terms version
         </Button>
       </header>
+      {kept.pending?.value && (
+        <RestoreBar
+          text={kept.pending.value.id ? `Changes to the terms version “${kept.pending.label}”` : `New terms version “${kept.pending.label || "untitled"}”`}
+          at={kept.pending.at}
+          onRestore={() => {
+            const v = kept.restore();
+            if (!v) return;
+            const stillThere = v.id == null || (list ?? []).some((x) => x.id === v.id);
+            setEditingState(stillThere ? v : { ...v, id: undefined });
+            setEditingOrig("");
+          }}
+          onDiscard={kept.discard}
+        />
+      )}
       <div className={`${styles.row} ${!anyDefault ? styles.rowDefault : ""}`}>
         <div className={styles.rowMain}>
           <span className={styles.name}>

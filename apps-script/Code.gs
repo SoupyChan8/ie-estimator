@@ -85,6 +85,7 @@ function doPost(e) {
       case 'deleteCategory': return json(withState(() => deleteCategory(Number(p.id))));
       case 'saveItem': return json(withState(() => saveItem(p)));
       case 'deleteItem': return json(withState(() => deleteItem(Number(p.id))));
+      case 'reorder': return json(withState(() => reorder(p)));
       case 'savePdf': return json(withLock(() => savePdf(p)));
       case 'saveContractOptions': return json(withLock(() => saveContractOptions(p)));
       case 'listVersions': return json(listVersions(p.kind));
@@ -389,6 +390,22 @@ function saveItem(p) {
     .reduce((m, i) => Math.max(m, num(i.sortOrder)), 0) + 1;
   sheet.appendRow(rowFor(TABS.items, item));
   return { id: item.id };
+}
+
+/** Puts categories, or items that sit side by side, in the given order (sortOrder 1, 2, 3…). */
+function reorder(p) {
+  const tab = p.kind === 'categories' ? TABS.categories : TABS.items;
+  const ids = (p.ids || []).map(Number).filter(x => x > 0);
+  if (!ids.length) throw new Error('Nothing to reorder.');
+  const sheet = sheetOf(tab);
+  const head = headersOf(tab);
+  const idCol = head.indexOf('id'), sortCol = head.indexOf('sortOrder');
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    const at = ids.indexOf(Number(values[r][idCol]));
+    if (at >= 0) sheet.getRange(r + 1, sortCol + 1).setValue(at + 1);
+  }
+  return { ok: true };
 }
 
 /* ───────────────────────── Contracts ───────────────────────── */

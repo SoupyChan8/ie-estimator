@@ -41,8 +41,9 @@ Open it from the estimator (lock icon). It asks for the password again and locks
     - Payment schedule and project timeline.
     - A terms bar showing **Currently using** a saved terms version, or **Custom · Edited from …**.
   - **PDF preview**: download the PDF, or save it to the cloud (Supabase storage).
-- **Rate book**: categories, items, add-ons, three tier rates, default quantity per BHK, *Quantity = carpet area*, and *Show to clients*. The bar at the top shows which saved version is in use, or **Custom (unsaved)** once anything is edited. From there you can switch versions, update the version, or save a new one. If you switch away from unsaved custom rates, they are kept as a backup version first.
+- **Rate book**: categories, items, add-ons, three tier rates, default quantity per BHK, *Quantity = carpet area*, and *Show to clients*. The bar at the top shows which saved version is in use, or **Custom (unsaved)** once anything is edited. From there you can switch versions, update the version, or save a new one. If you switch away from unsaved custom rates, they are kept as a backup version first. Use the ▲▼ arrows to change the order of categories (on the selected one) and items; add-ons move within their main item. The estimator and PDF follow this order.
 - **Saved versions**: all rate book and terms versions. **Use this version** / **Currently using** marks the active one; the terms version in use is what new quotations start with.
+- **Unsaved edits are kept on the iPad**: an item being added or edited, a terms version being edited, and a contract's quotation details. If the app closes before you save, a bar offers **Restore** or **Discard** next time. These copies stay on that device only and are removed once you save or cancel.
 - **Settings**: change your password, or sign this iPad out.
 
 ## One-time setup
